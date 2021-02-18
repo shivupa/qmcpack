@@ -187,12 +187,11 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate_vgl_imp
         const size_t spin = spinC[i];
         const size_t N                   = Dets[j]->FirstIndex;
         const size_t NP                  = Dets[j]->NumPtcls;
-        const int det_id = getDetID(iat);
         spin_psi *= detValues_spin[spin];
         for (int k = 0, n = N; k < NP; k++, n++)
         {
-          g_tmp[n] += C_otherDs[det_id][i] * grads_spin(spin, k); //myG[n] += c*grads_spin(spin,k)*(detValues_otherspin[otherspin]...);
-          l_tmp[n] += C_otherDs[det_id][i] * lapls_spin(spin, k); //myL[n] += c*lapls_spin(spin,k)*(detValues_otherspin[otherspin]...);
+          g_tmp[n] += C_otherDs[j][i] * grads_spin(spin, k); //myG[n] += c*grads_spin(spin,k)*(detValues_otherspin[otherspin]...);
+          l_tmp[n] += C_otherDs[j][i] * lapls_spin(spin, k); //myL[n] += c*lapls_spin(spin,k)*(detValues_otherspin[otherspin]...);
         }
     }
     psi += spin_psi;
