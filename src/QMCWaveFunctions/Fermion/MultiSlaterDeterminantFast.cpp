@@ -207,8 +207,8 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate(Particl
                                                                          ParticleSet::ParticleLaplacian_t& L)
 {
   ScopedTimer local_timer(&EvaluateTimer);
-  Dets[0]->evaluateForWalkerMove(P);
-  Dets[1]->evaluateForWalkerMove(P);
+  for (size_t id = 0; id < Dets.size(); id++)
+    Dets[id]->evaluateForWalkerMove(P);
 
   psiCurrent = evaluate_vgl_impl(P, myG, myL);
 
@@ -256,23 +256,19 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evalGrad_impl_no
                                                                                             bool newpos,
                                                                                             GradType& g_at)
 {
-  const bool upspin = getDetID(iat) == 0;
-  const int spin0   = (upspin) ? 0 : 1;
-  const int spin1   = (upspin) ? 1 : 0;
+  const int det_id = getDetID(iat);
 
   if (newpos)
-    Dets[spin0]->evaluateDetsAndGradsForPtclMove(P, iat);
+    Dets[det_id]->evaluateDetsAndGradsForPtclMove(P, iat);
   else
-    Dets[spin0]->evaluateGrads(P, iat);
+    Dets[det_id]->evaluateGrads(P, iat);
 
-  const GradMatrix_t& grads            = (newpos) ? Dets[spin0]->new_grads : Dets[spin0]->grads;
-  const ValueType* restrict detValues0 = (newpos) ? Dets[spin0]->new_detValues.data() : Dets[spin0]->detValues.data();
-  const ValueType* restrict detValues1 = Dets[spin1]->detValues.data();
+  const GradMatrix_t& grads            = (newpos) ? Dets[det_id]->new_grads : Dets[det_id]->grads;
+  const ValueType* restrict detValues0 = (newpos) ? Dets[det_id]->new_detValues.data() : Dets[det_id]->detValues.data();
   const size_t* restrict det0          = (*C2node)[spin0].data();
-  const size_t* restrict det1          = (*C2node)[spin1].data();
   const ValueType* restrict cptr       = C->data();
   const size_t nc                      = C->size();
-  const size_t noffset                 = Dets[spin0]->FirstIndex;
+  const size_t noffset                 = Dets[det_id]->FirstIndex;
   PsiValueType psi(0);
   for (size_t i = 0; i < nc; ++i)
   {
@@ -280,7 +276,10 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evalGrad_impl_no
     //const size_t d1=det1[i];
     //psi +=  cptr[i]*detValues0[d0]        * detValues1[d1];
     //g_at += cptr[i]*grads(d0,iat-noffset) * detValues1[d1];
-    const ValueType t = cptr[i] * detValues1[det1[i]];
+    ValueType t = cptr[i];
+    for (size_t id = 0; id < Dets.size(); id++)
+      if (id != det_id)  
+        t *= Dets[id]->detValues.data()[det1[i]];
     psi += t * detValues0[d0];
     g_at += t * grads(d0, iat - noffset);
   }
@@ -425,7 +424,7 @@ void MultiSlaterDeterminantFast::registerData(ParticleSet& P, WFBufferType& buf)
   {
     APP_ABORT("Fast MSD+BF: restore not implemented. \n");
   }
-
+    
   Dets[0]->registerData(P, buf);
   Dets[1]->registerData(P, buf);
 
@@ -475,23 +474,27 @@ void MultiSlaterDeterminantFast::checkInVariables(opt_variables_type& active)
     else
       Optimizable = false;
   }
-  if (Dets[0]->Optimizable && Dets[1]->Optimizable)
-  {
-    Dets[0]->checkInVariables(active);
-    Dets[1]->checkInVariables(active);
-  }
+  bool all_Optimizable = true;
+  for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+    all_Optimizable = Dets[id]->Optimizable;
+
+  if(all_Optimizable)
+    for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+      Dets[id]->checkInVariables(active);
 }
 
 void MultiSlaterDeterminantFast::checkOutVariables(const opt_variables_type& active)
 {
   if (CI_Optimizable)
     myVars->getIndex(active);
+  
+  bool all_Optimizable = true;
+  for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+    all_Optimizable = Dets[id]->Optimizable;
 
-  if (Dets[0]->Optimizable && Dets[1]->Optimizable)
-  {
-    Dets[0]->checkOutVariables(active);
-    Dets[1]->checkOutVariables(active);
-  }
+  if(all_Optimizable)
+    for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+      Dets[id]->checkOutVariables(active);
 }
 
 /** resetParameters with optVariables
@@ -842,8 +845,8 @@ void MultiSlaterDeterminantFast::evaluateDerivativesWF(ParticleSet& P,
 
 void MultiSlaterDeterminantFast::buildOptVariables()
 {
-  Dets[0]->buildOptVariables((*C2node)[0]);
-  Dets[1]->buildOptVariables((*C2node)[1]);
+  for (size_t id = 0; id < Dets.size(); id++)
+    Dets[id]->buildOptVariables((*C2node)[id]);
 }
 
 void MultiSlaterDeterminantFast::registerTimers()
