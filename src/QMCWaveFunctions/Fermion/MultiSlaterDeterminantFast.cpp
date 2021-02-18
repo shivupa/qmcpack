@@ -191,8 +191,8 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate_vgl_imp
         spin_psi *= detValues_spin[spin];
         for (int k = 0, n = N; k < NP; k++, n++)
         {
-          g_tmp[n] += C_otherDs[det_idx][i] * grads_spin(spin, k); //myG[n] += c*grads_spin(spin,k)*(detValues_otherspin[otherspin]...);
-          l_tmp[n] += C_otherDs[det_idx][i] * lapls_spin(spin, k); //myL[n] += c*lapls_spin(spin,k)*(detValues_otherspin[otherspin]...);
+          g_tmp[n] += C_otherDs[det_id][i] * grads_spin(spin, k); //myG[n] += c*grads_spin(spin,k)*(detValues_otherspin[otherspin]...);
+          l_tmp[n] += C_otherDs[det_id][i] * lapls_spin(spin, k); //myL[n] += c*lapls_spin(spin,k)*(detValues_otherspin[otherspin]...);
         }
     }
     psi += spin_psi;
