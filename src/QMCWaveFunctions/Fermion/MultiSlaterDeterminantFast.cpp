@@ -187,8 +187,15 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate_vgl_imp
         const size_t spin = spinC[i];
         const size_t N                   = Dets[j]->FirstIndex;
         const size_t NP                  = Dets[j]->NumPtcls;
-        const ValueType c_spin = c * detValues_spin[spin];
-
+        ValueType c_spin = c;
+        for (size_t k = 0; k < nd; ++k){
+            if (j != k ){
+              const auto& otherspinC  = (*C2node)[k];
+              const size_t otherspin = otherspinC[i];
+              const ValueVector_t& detValues_otherspin = Dets[k]->detValues;
+              c_spin *= detValues_otherspin[otherspin];
+            }
+        }
         spin_psi *= detValues_spin[spin];
         for (int k = 0, n = N; k < NP; k++, n++)
         {
