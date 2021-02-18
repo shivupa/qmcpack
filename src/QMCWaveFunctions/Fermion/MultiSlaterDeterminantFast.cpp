@@ -166,48 +166,41 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate_vgl_imp
     ParticleSet::ParticleGradient_t& g_tmp,
     ParticleSet::ParticleLaplacian_t& l_tmp)
 {
-  const ValueVector_t& detValues_up = Dets[0]->detValues;
-  const ValueVector_t& detValues_dn = Dets[1]->detValues;
-  const GradMatrix_t& grads_up      = Dets[0]->grads;
-  const GradMatrix_t& grads_dn      = Dets[1]->grads;
-  const ValueMatrix_t& lapls_up     = Dets[0]->lapls;
-  const ValueMatrix_t& lapls_dn     = Dets[1]->lapls;
-  const size_t N1                   = Dets[0]->FirstIndex;
-  const size_t N2                   = Dets[1]->FirstIndex;
-  const size_t NP1                  = Dets[0]->NumPtcls;
-  const size_t NP2                  = Dets[1]->NumPtcls;
   const ValueType czero(0);
   PsiValueType psi = czero;
+  PsiValueType spin_psi = czero;
   g_tmp            = czero;
   l_tmp            = czero;
 
   const ValueType* restrict cptr = C->data();
   const size_t nc                = C->size();
-  const auto& upC                = (*C2node)[0];
-  const auto& dnC                = (*C2node)[1];
+  const size_t nd                = Dets.size();
   for (size_t i = 0; i < nc; ++i)
   {
     const ValueType c = cptr[i];
-    const size_t up   = upC[i];
-    const size_t down = dnC[i];
-    psi += c * detValues_up[up] * detValues_dn[down];
-    const ValueType c_up = c * detValues_dn[down];
-    const ValueType c_dn = c * detValues_up[up];
-    for (int k = 0, n = N1; k < NP1; k++, n++)
-    {
-      g_tmp[n] += c_up * grads_up(up, k); //myG[n] += c*grads_up(up,k)*detValues_dn[down];
-      l_tmp[n] += c_up * lapls_up(up, k); //myL[n] += c*lapls_up(up,k)*detValues_dn[down];
-    }
-    for (int k = 0, n = N2; k < NP2; k++, n++)
-    {
-      g_tmp[n] += c_dn * grads_dn(down, k); //myG[n] += c*grads_dn(down,k)*detValues_up[up];
-      l_tmp[n] += c_dn * lapls_dn(down, k); //myL[n] += c*lapls_dn(down,k)*detValues_up[up];
-    }
-  }
-  ValueType psiinv = static_cast<ValueType>(PsiValueType(1.0) / psi);
-  g_tmp *= psiinv;
-  l_tmp *= psiinv;
+    spin_psi = c;
+    for (size_t j = 0; j < nd; ++j){
+        const GradMatrix_t& grads_spin      = Dets[j]->grads;
+        const ValueVector_t& detValues_spin = Dets[j]->detValues;
+        const ValueMatrix_t& lapls_spin     = Dets[j]->lapls;
+        const auto& spinC  = (*C2node)[j];
+        const size_t spin = spinC[i];
+        const size_t N                   = Dets[j]->FirstIndex;
+        const size_t NP                  = Dets[j]->NumPtcls;
+        const ValueType c_spin = c * detValues_spin[spin];
 
+        spin_psi *= detValues_spin[spin];
+        for (int k = 0, n = N; k < NP; k++, n++)
+        {
+          g_tmp[n] += c_spin * grads_spin(spin, k); //myG[n] += c*grads_up(up,k)*detValues_dn[down];
+          l_tmp[n] += c_spin * lapls_spin(spin, k); //myL[n] += c*lapls_up(up,k)*detValues_dn[down];
+        }
+    }
+    psi += spin_psi;
+    ValueType psiinv = static_cast<ValueType>(PsiValueType(1.0) / psi);
+    g_tmp *= psiinv;
+    l_tmp *= psiinv;
+  }
   return psi;
 }
 
