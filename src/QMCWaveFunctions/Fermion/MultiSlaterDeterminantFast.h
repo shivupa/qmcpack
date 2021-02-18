@@ -150,7 +150,6 @@ public:
   PsiValueType curRatio;
   PsiValueType psiCurrent;
 
-  // assume Dets[0]: up, Dets[1]:down
   std::vector<std::unique_ptr<MultiDiracDeterminant>> Dets;
   std::map<std::string, size_t> SPOSetID;
 
@@ -160,13 +159,12 @@ public:
   std::shared_ptr<std::vector<std::vector<size_t>>> C2node;
   /// CI coefficients
   std::shared_ptr<std::vector<ValueType>> C;
-  /// C_n x D^1_n x D^2_n ... D^3 with one D removed. Sumed by group. [spin, unique det id]
+  /// C_n x D^1_n x D^2_n ... D^3_n with one D removed. Summed by group. [spin, unique det id]
   std::vector<std::vector<ValueType>> C_otherDs;
 
   ParticleSet::ParticleGradient_t myG, myG_temp;
   ParticleSet::ParticleLaplacian_t myL, myL_temp;
-  ValueVector_t laplSum_up;
-  ValueVector_t laplSum_dn;
+  std::vector<ValueVector_t> laplSum;
 
   //optimizable variable is shared with the clones
   std::shared_ptr<opt_variables_type> myVars;
@@ -183,9 +181,8 @@ public:
 
   // temporary storage for evaluateDerivatives
   ParticleSet::ParticleGradient_t gmPG;
-  Matrix<RealType> dpsia_up, dLa_up;
-  Matrix<RealType> dpsia_dn, dLa_dn;
-  Array<GradType, OHMMS_DIM> dGa_up, dGa_dn;
+  std::vector<Matrix<RealType>> dpsia, dLa;
+  std::vector<Array<GradType, OHMMS_DIM>> dGa;
 
 private:
   //get Det ID. It should be consistent with particle group id within the particle set.
