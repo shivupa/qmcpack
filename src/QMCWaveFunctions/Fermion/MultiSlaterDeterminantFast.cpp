@@ -265,7 +265,7 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evalGrad_impl_no
 
   const GradMatrix_t& grads            = (newpos) ? Dets[det_id]->new_grads : Dets[det_id]->grads;
   const ValueType* restrict detValues0 = (newpos) ? Dets[det_id]->new_detValues.data() : Dets[det_id]->detValues.data();
-  const size_t* restrict det0          = (*C2node)[spin0].data();
+  const size_t* restrict det0          = (*C2node)[det_id].data();
   const ValueType* restrict cptr       = C->data();
   const size_t nc                      = C->size();
   const size_t noffset                 = Dets[det_id]->FirstIndex;
@@ -277,9 +277,13 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evalGrad_impl_no
     //psi +=  cptr[i]*detValues0[d0]        * detValues1[d1];
     //g_at += cptr[i]*grads(d0,iat-noffset) * detValues1[d1];
     ValueType t = cptr[i];
-    for (size_t id = 0; id < Dets.size(); id++)
-      if (id != det_id)  
-        t *= Dets[id]->detValues.data()[det1[i]];
+    for (size_t id = 0; id < Dets.size(); id++){
+      if (id != det_id){
+        const ValueType* restrict detValues1 = Dets[id]->detValues.data();
+        const size_t* restrict det1          = (*C2node)[id].data();
+        t *= detValues1[det1[i]];
+      }
+    }
     psi += t * detValues0[d0];
     g_at += t * grads(d0, iat - noffset);
   }
@@ -349,22 +353,28 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::ratio_impl(Parti
 
 WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::ratio_impl_no_precompute(ParticleSet& P, int iat)
 {
-  const bool upspin = getDetID(iat) == 0;
-  const int spin0   = (upspin) ? 0 : 1;
-  const int spin1   = (upspin) ? 1 : 0;
+  const int det_id = getDetID(iat);
+  Dets[det_id]->evaluateDetsForPtclMove(P, iat);
 
-  Dets[spin0]->evaluateDetsForPtclMove(P, iat);
 
-  const ValueType* restrict detValues0 = Dets[spin0]->new_detValues.data(); //always new
-  const ValueType* restrict detValues1 = Dets[spin1]->detValues.data();
-  const size_t* restrict det0          = (*C2node)[spin0].data();
-  const size_t* restrict det1          = (*C2node)[spin1].data();
+  const ValueType* restrict detValues0 = Dets[det_id]->new_detValues.data(); //always new
+  const size_t* restrict det0          = (*C2node)[det_id].data();
   const ValueType* restrict cptr       = C->data();
   const size_t nc                      = C->size();
 
   PsiValueType psi = 0;
-  for (size_t i = 0; i < nc; ++i)
-    psi += cptr[i] * detValues0[det0[i]] * detValues1[det1[i]];
+  for (size_t i = 0; i < nc; ++i){
+    ValueType t = cptr[i];
+    for (size_t id = 0; id < Dets.size(); id++){
+      if (id != det_id){
+        const ValueType* restrict detValues1 = Dets[id]->detValues.data();
+        const size_t* restrict det1          = (*C2node)[id].data();
+        t *= detValues1[det1[i]];
+      }
+    }
+    t *= detValues0[det0[i]];
+    psi += t;
+  }
   return psi;
 }
 
@@ -425,8 +435,8 @@ void MultiSlaterDeterminantFast::registerData(ParticleSet& P, WFBufferType& buf)
     APP_ABORT("Fast MSD+BF: restore not implemented. \n");
   }
     
-  Dets[0]->registerData(P, buf);
-  Dets[1]->registerData(P, buf);
+  for (size_t id = 0; id < Dets.size(); id++)
+    Dets[id]->registerData(P, buf);
 
   buf.add(psiCurrent);
 }
@@ -438,8 +448,8 @@ WaveFunctionComponent::LogValueType MultiSlaterDeterminantFast::updateBuffer(Par
 {
   ScopedTimer local_timer(&UpdateTimer);
 
-  Dets[0]->updateBuffer(P, buf, fromscratch);
-  Dets[1]->updateBuffer(P, buf, fromscratch);
+  for (size_t id = 0; id < Dets.size(); id++)
+    Dets[id]->updateBuffer(P, buf, fromscratch);
 
   psiCurrent = evaluate_vgl_impl(P, myG, myL);
 
@@ -458,8 +468,8 @@ void MultiSlaterDeterminantFast::copyFromBuffer(ParticleSet& P, WFBufferType& bu
   {
     APP_ABORT("Fast MSD+BF: copyFromBuffer not implemented. \n");
   }
-  Dets[0]->copyFromBuffer(P, buf);
-  Dets[1]->copyFromBuffer(P, buf);
+  for (size_t id = 0; id < Dets.size() ; id++)
+    Dets[id]->copyFromBuffer(P, buf);
 
   buf.get(psiCurrent);
 }
@@ -479,7 +489,7 @@ void MultiSlaterDeterminantFast::checkInVariables(opt_variables_type& active)
     all_Optimizable = Dets[id]->Optimizable;
 
   if(all_Optimizable)
-    for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+    for (size_t id = 0; id < Dets.size(); id++)
       Dets[id]->checkInVariables(active);
 }
 
@@ -493,7 +503,7 @@ void MultiSlaterDeterminantFast::checkOutVariables(const opt_variables_type& act
     all_Optimizable = Dets[id]->Optimizable;
 
   if(all_Optimizable)
-    for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+    for (size_t id = 0; id < Dets.size();  id++)
       Dets[id]->checkOutVariables(active);
 }
 
@@ -543,11 +553,13 @@ void MultiSlaterDeterminantFast::resetParameters(const opt_variables_type& activ
       //for(int i=0; i<Dets.size(); i++) Dets[i]->resetParameters(active);
     }
   }
-  if (Dets[0]->Optimizable && Dets[1]->Optimizable)
-  {
-    Dets[0]->resetParameters(active);
-    Dets[1]->resetParameters(active);
-  }
+  bool all_Optimizable = true;
+  for (size_t id = 0; id < Dets.size() && all_Optimizable; id++)
+    all_Optimizable = Dets[id]->Optimizable;
+
+  if(all_Optimizable)
+    for (size_t id = 0; id < Dets.size();  id++)
+      Dets[id]->resetParameters(active);
 }
 void MultiSlaterDeterminantFast::reportStatus(std::ostream& os) {}
 
