@@ -188,7 +188,7 @@ WaveFunctionComponent::PsiValueType MultiSlaterDeterminantFast::evaluate_vgl_imp
         const size_t N                   = Dets[id]->FirstIndex;
         const size_t NP                  = Dets[id]->NumPtcls;
         spin_psi *= detValues_spin[spin];
-        ValueType temp = 1.0;
+        ValueType temp = c;
         for (size_t other_id = 0; other_id < Dets.size(); other_id++){
             if (other_id==id)
                 continue;
