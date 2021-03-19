@@ -741,7 +741,7 @@ void MultiSlaterDeterminantFast::evaluateDerivatives(ParticleSet& P,
   }
   for (size_t id = 0; id < Dets.size(); id++)
   {
-    for (size_t other_id = id + 1; id < Dets.size(); id++)
+    for (size_t other_id = id + 1; other_id < Dets.size(); other_id++)
     {
       Dets[id]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets[other_id],
                                     static_cast<ValueType>(psiCurrent), *C, (*C2node)[id], (*C2node)[other_id]);
@@ -821,7 +821,7 @@ void MultiSlaterDeterminantFast::evaluateDerivativesWF(ParticleSet& P,
   for (size_t id = 0; id < Dets.size(); id++)
   {
     // FIXME this needs to be fixed by SPF to separate evaluateDerivatives and evaluateDerivativesWF for orbital rotation matrix
-    for (size_t other_id = id + 1; id < Dets.size(); id++)
+    for (size_t other_id = id + 1; other_id < Dets.size(); other_id++)
     {
       Dets[id]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets[other_id], psiCurrent, *C, (*C2node)[id],
                                       (*C2node)[other_id]);
