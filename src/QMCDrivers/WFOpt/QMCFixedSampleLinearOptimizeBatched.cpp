@@ -1217,7 +1217,7 @@ bool QMCFixedSampleLinearOptimizeBatched::one_shift_run()
   // say what we are doing
   app_log() << std::endl
             << "*****************************************" << std::endl
-            << "Building overlap and Hamiltonian matrices" << std::endl
+            << "Building overlap and Hamiltonian matrices Batched" << std::endl
             << "*****************************************" << std::endl;
 
   // allocate the matrices we will need

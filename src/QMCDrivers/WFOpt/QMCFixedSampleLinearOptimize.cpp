@@ -1209,8 +1209,11 @@ bool QMCFixedSampleLinearOptimize::one_shift_run()
   std::vector<RealType> currentParameters(numParams, 0.0);
 
   // initialize the initial and current parameter vectors
-  for (int i = 0; i < numParams; i++)
+  app_log() << "START PARAMS" << std::endl;
+  for (int i = 0; i < numParams; i++){
     currentParameters.at(i) = std::real(optTarget->Params(i));
+    app_log() << currentParameters.at(i) << std::endl;
+ }
 
   // prepare vectors to hold the parameter update directions for each shift
   std::vector<RealType> parameterDirections;
@@ -1228,7 +1231,7 @@ bool QMCFixedSampleLinearOptimize::one_shift_run()
   // say what we are doing
   app_log() << std::endl
             << "*****************************************" << std::endl
-            << "Building overlap and Hamiltonian matrices" << std::endl
+            << "Building overlap and Hamiltonian matrices non batch" << std::endl
             << "*****************************************" << std::endl;
 
   // allocate the matrices we will need
@@ -1244,6 +1247,26 @@ bool QMCFixedSampleLinearOptimize::one_shift_run()
   // build the overlap and hamiltonian matrices
   optTarget->fillOverlapHamiltonianMatrices(hamMat, ovlMat);
   invMat.copy(ovlMat);
+
+  // print the hamiltonian matrix
+  app_log() << std::endl;
+  app_log() << "printing H matrix:" << std::endl;
+  for (int i = 0; i < hamMat.rows(); i++) {
+    for (int j = 0; j < hamMat.cols(); j++)
+      app_log() << " " << std::scientific << std::right << std::setw(14) << std::setprecision(5) << hamMat(i,j);
+    app_log() << std::endl;
+  }
+  app_log() << std::endl;
+
+  // print the overlap matrix
+  app_log() << std::endl;
+  app_log() << "printing S matrix:" << std::endl;
+  for (int i = 0; i < ovlMat.rows(); i++) {
+    for (int j = 0; j < ovlMat.cols(); j++)
+      app_log() << " " << std::scientific << std::right << std::setw(14) << std::setprecision(5) << ovlMat(i,j);
+    app_log() << std::endl;
+  }
+  app_log() << std::endl;
 
   // apply the identity shift
   for (int i = 1; i < N; i++)
@@ -1269,22 +1292,36 @@ bool QMCFixedSampleLinearOptimize::one_shift_run()
     for (int j = i + 1; j < N; j++)
       std::swap(prdMat(i, j), prdMat(j, i));
 
+  app_log() << "SHIV PARAMS" << std::endl;
+  for (int i = 0; i < numParams; i++){
+    app_log() << parameterDirections.at(i+1) << std::endl;
+  }
   // compute the lowest eigenvalue of the product matrix and the corresponding eigenvector
   const RealType lowestEV = getLowestEigenvector(prdMat, parameterDirections);
 
+  app_log() << "SHIV PARAMS2" << std::endl;
+  for (int i = 0; i < numParams; i++){
+    app_log() << parameterDirections.at(i+1) << std::endl;
+  }
   // compute the scaling constant to apply to the update
   Lambda = getNonLinearRescale(parameterDirections, ovlMat);
 
   // scale the update by the scaling constant
-  for (int i = 0; i < numParams; i++)
+  app_log() << "SHIV PARAMS3" << std::endl;
+  for (int i = 0; i < numParams; i++){
+    app_log() << parameterDirections.at(i+1) << "    " << Lambda <<std::endl;
     parameterDirections.at(i + 1) *= Lambda;
+  }
 
   // now that we are done building the matrices, prevent further computation of derivative vectors
   optTarget->setneedGrads(false);
 
   // prepare to use the middle shift's update as the guiding function for a new sample
-  for (int i = 0; i < numParams; i++)
+  app_log() << "SHIV PARAMS4" << std::endl;
+  for (int i = 0; i < numParams; i++){
     optTarget->Params(i) = currentParameters.at(i) + parameterDirections.at(i + 1);
+    app_log() << i << "    " << optTarget->Params(i) << "  " << currentParameters.at(i) << "  " << parameterDirections.at(i+1) << std::endl;
+  }
 
   RealType largestChange(0);
   int max_element = 0;

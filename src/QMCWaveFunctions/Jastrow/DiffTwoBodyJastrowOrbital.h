@@ -56,6 +56,7 @@ public:
     NumPtcls  = p.getTotalNum();
     NumGroups = p.groups();
     F.resize(NumGroups * NumGroups, 0);
+    app_log() << "NumGroups: " << NumGroups << " F.size() " << F.size();
   }
 
   ~DiffTwoBodyJastrowOrbital()
@@ -135,9 +136,11 @@ public:
       lapLogPsi.resize(NumVars, 0);
       for (int i = 0; i < NumVars; ++i)
       {
+        app_log() << i << " myVars.Index[i] " << myVars.Index[i] << std::endl;
         gradLogPsi[i] = new GradVectorType(NumPtcls);
         lapLogPsi[i]  = new ValueVectorType(NumPtcls);
       }
+      app_log() << "ERROR IS HERE" << std::endl;
       OffSet.resize(F.size());
       int varoffset = -1;
       for (int i = 0; i < myVars.size(); i++)
@@ -150,6 +153,8 @@ public:
       {
         if (F[i] && F[i]->myVars.Index.size())
         {
+          app_log() << i << " F[i]->myVars.Index.front() " << F[i]->myVars.Index.front() << " varoffset " << varoffset
+                    << " F[i]->myVars.Index.size() " << F[i]->myVars.Index.size() << std::endl;
           OffSet[i].first  = F[i]->myVars.Index.front() - varoffset;
           OffSet[i].second = F[i]->myVars.Index.size() + OffSet[i].first;
         }
@@ -157,7 +162,9 @@ public:
         {
           OffSet[i].first = OffSet[i].second = -1;
         }
+        app_log() << i << " " << OffSet[i].first << " " << OffSet[i].second << std::endl;
       }
+      app_log() << "ERROR IS HERE DONE" << std::endl;
     }
   }
 
@@ -166,6 +173,7 @@ public:
                            std::vector<ValueType>& dlogpsi,
                            std::vector<ValueType>& dhpsioverpsi)
   {
+    app_log() << "start DiffTwoBodyJastrowOrbital debug" << std::endl;
     if (myVars.size() == 0)
       return;
     evaluateDerivativesWF(P, active, dlogpsi);
@@ -175,7 +183,9 @@ public:
     {
       int kk = myVars.where(k);
       if (kk < 0)
+      {
         continue;
+      }
       if (active.recompute(kk))
         recalculate = true;
       rcsingles[kk] = true;
@@ -190,13 +200,18 @@ public:
         if (rcsingles[kk])
         {
           dhpsioverpsi[kk] = -RealType(0.5) * ValueType(Sum(*lapLogPsi[kk])) - ValueType(Dot(P.G, *gradLogPsi[kk]));
+          app_log() << "kk" << kk << " dhpsioverpsi[kk] " << dhpsioverpsi[kk] << " ValueType(Sum(*lapLogPsi[kk])) "
+                    << ValueType(Sum(*lapLogPsi[kk])) << " ValueType(Dot(P.G, *gradLogPsi[kk])) "
+                    << ValueType(Dot(P.G, *gradLogPsi[kk])) << std::endl;
         }
       }
     }
+    app_log() << "end DiffTwoBodyJastrowOrbital debug" << std::endl;
   }
 
   void evaluateDerivativesWF(ParticleSet& P, const opt_variables_type& active, std::vector<ValueType>& dlogpsi)
   {
+    app_log() << "Start evaluateDerivativesWF" << std::endl;
     if (myVars.size() == 0)
       return;
     bool recalculate(false);
@@ -204,16 +219,24 @@ public:
     for (int k = 0; k < myVars.size(); ++k)
     {
       int kk = myVars.where(k);
+      app_log() << " k " << k << " kk " << kk;
       if (kk < 0)
+      {
+        app_log() << std::endl;
         continue;
+      }
+      app_log() << " active.recompute(kk) " << active.recompute(kk) << std::endl;
       if (active.recompute(kk))
         recalculate = true;
-      rcsingles[k] = true;
+      rcsingles[kk] = true;
     }
+    app_log() << "recalculate: " << recalculate << std::endl;
+    app_log() << "size compare: " << myVars.size() << " " << F.size() << std::endl;
     if (recalculate)
     {
       ///precomputed recalculation switch
       std::vector<bool> RecalcSwitch(F.size(), false);
+      app_log() << "RecalcSwitch" << std::endl;
       for (int i = 0; i < F.size(); ++i)
       {
         if (OffSet[i].first < 0)
@@ -224,12 +247,21 @@ public:
         else
         {
           bool recalcFunc(false);
-          for (int rcs = OffSet[i].first; rcs < OffSet[i].second; rcs++)
+          app_log() << "SHIV" << std::endl;
+          app_log() << "i " << i << " OffSet[i].first" << OffSet[i].first << " OffSet[i].second" << OffSet[i].second
+                    << std::endl;
+          for (int rcs = myVars.where(OffSet[i].first); rcs < myVars.where(OffSet[i].second); rcs++)
+          {
+            app_log() << "    rcs " << rcs << " rcsingles[rcs] " << rcsingles[rcs] << std::endl;
             if (rcsingles[rcs] == true)
               recalcFunc = true;
+          }
           RecalcSwitch[i] = recalcFunc;
         }
+        app_log() << "i " << i << " OffSet[i] " << OffSet[i].first << " RecalcSwitch[i] " << RecalcSwitch[i]
+                  << std::endl;
       }
+      app_log() << std::endl;
       dLogPsi = 0.0;
       for (int p = 0; p < NumVars; ++p)
         (*gradLogPsi[p]) = 0.0;
@@ -283,6 +315,7 @@ public:
         //optVars.setDeriv(p,dLogPsi[ip],-0.5*Sum(*lapLogPsi[ip])-Dot(P.G,*gradLogPsi[ip]));
       }
     }
+    app_log() << "End evaluateDerivativesWF" << std::endl;
   }
 
   DiffWaveFunctionComponentPtr makeClone(ParticleSet& tqp) const

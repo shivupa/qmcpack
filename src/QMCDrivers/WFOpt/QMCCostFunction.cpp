@@ -295,6 +295,19 @@ void QMCCostFunction::checkConfigurations()
         std::vector<Return_t> HDsaved(NumOptimizables, 0.0);
 
         psiClones[ip]->evaluateDerivatives(wRef, OptVariablesForPsi, Dsaved, HDsaved);
+        app_log() << "Start psiClones[ip]->evaluateDerivatives dump" << std::endl;
+        for (int i = 0; i < NumOptimizables; i++)
+        {
+          app_log() << "i ";
+          app_log() << i;
+          app_log() << " Dsaved[i] ";
+          app_log() << Dsaved[i]  ;
+          app_log() << " HDsaved[i] " ;
+          app_log() << HDsaved[i] ;
+          app_log() << std::endl;
+        }
+        app_log() << "END psiClones[ip]->evaluateDerivatives dump" << std::endl;
+        app_log().flush();
         etmp = hClones[ip]->evaluateValueAndDerivatives(wRef, OptVariablesForPsi, Dsaved, HDsaved, compute_nlpp);
 
 

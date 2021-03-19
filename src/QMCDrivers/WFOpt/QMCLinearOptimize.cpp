@@ -519,7 +519,7 @@ QMCLinearOptimize::RealType QMCLinearOptimize::getLowestEigenvector(Matrix<RealT
     }
   }
   std::sort(mappedEigenvalues.begin(), mappedEigenvalues.end());
-  //         for (int i=0; i<4; i++) app_log()<<i<<": "<<alphar[mappedEigenvalues[i].second]<< std::endl;
+  for (int i=0; i<4; i++) app_log()<<i<<": "<<mappedEigenvalues[i].first<<  "  "<<alphar[mappedEigenvalues[i].second]<< std::endl;
   for (int i = 0; i < Nl; i++)
     ev[i] = eigenT(mappedEigenvalues[0].second, i) / eigenT(mappedEigenvalues[0].second, 0);
   return alphar[mappedEigenvalues[0].second];
