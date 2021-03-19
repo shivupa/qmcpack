@@ -739,20 +739,16 @@ void MultiSlaterDeterminantFast::evaluateDerivatives(ParticleSet& P,
       }
     }
   }
-  if (Dets.size() != 2)
+  for (size_t id = 0; id < Dets.size(); id++)
   {
-    throw std::runtime_error(
-        "MultiSlaterDeterminantFast::evaluateDerivatives only compatible with two quantum particle types.");
+    for (size_t other_id = id + 1; id < Dets.size(); id++)
+    {
+      Dets[id]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets[other_id],
+                                    static_cast<ValueType>(psiCurrent), *C, (*C2node)[id], (*C2node)[other_id]);
+      Dets[other_id]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets[id],
+                                          static_cast<ValueType>(psiCurrent), *C, (*C2node)[other_id], (*C2node)[id]);
+    }
   }
-  else
-  {
-    Dets[0]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets[1], static_cast<ValueType>(psiCurrent), *C,
-                                 (*C2node)[0], (*C2node)[1]);
-    Dets[1]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets[0], static_cast<ValueType>(psiCurrent), *C,
-                                 (*C2node)[1], (*C2node)[0]);
-  }
-  //for (size_t id = 0; id < Dets.size(); id++)
-  //  Dets[id]->evaluateDerivatives(P, optvars, dlogpsi, dhpsioverpsi, *Dets, static_cast<ValueType>(psiCurrent), *C, *C2node, id);
 }
 
 void MultiSlaterDeterminantFast::evaluateDerivativesWF(ParticleSet& P,
@@ -822,19 +818,16 @@ void MultiSlaterDeterminantFast::evaluateDerivativesWF(ParticleSet& P,
       }
     }
   }
-
-  if (Dets.size() != 2)
-  {
-    throw std::runtime_error(
-        "MultiSlaterDeterminantFast::evaluateDerivativesWF only compatible with two quantum particle types.");
-  }
-  else
+  for (size_t id = 0; id < Dets.size(); id++)
   {
     // FIXME this needs to be fixed by SPF to separate evaluateDerivatives and evaluateDerivativesWF for orbital rotation matrix
-    Dets[0]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets[1], psiCurrent, *C, (*C2node)[0], (*C2node)[1]);
-    Dets[1]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets[0], psiCurrent, *C, (*C2node)[1], (*C2node)[0]);
-    // for (size_t id = 0; id < Dets.size(); id++)
-    //   Dets[id]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets, psiCurrent, *C, *C2node, id);
+    for (size_t other_id = id + 1; id < Dets.size(); id++)
+    {
+      Dets[id]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets[other_id], psiCurrent, *C, (*C2node)[id],
+                                      (*C2node)[other_id]);
+      Dets[other_id]->evaluateDerivativesWF(P, optvars, dlogpsi, *Dets[id], psiCurrent, *C, (*C2node)[other_id],
+                                            (*C2node)[id]);
+    }
   }
 }
 
