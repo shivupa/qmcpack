@@ -99,6 +99,7 @@ public:
         myVars.insertFrom(Funique[i]->myVars);
       }
     }
+    myVars.removeInactive();
     myVars.getIndex(active);
     NumVars = myVars.size();
     if (NumVars && dLogPsi.size() == 0)
@@ -112,7 +113,14 @@ public:
         lapLogPsi[i]  = new ValueVectorType(NumPtcls);
       }
       OffSet.resize(Fs.size());
-      int varoffset = myVars.Index[0];
+      // Find first active variable for the starting offset
+      int varoffset = -1;
+      for (int i = 0; i < myVars.size(); i++)
+      {
+        varoffset = myVars.Index[i];
+        if (varoffset != -1)
+          break;
+      }
       for (int i = 0; i < Fs.size(); ++i)
       {
         if (Fs[i])
