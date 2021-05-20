@@ -13,6 +13,7 @@
 #include "RadialJastrowBuilder.h"
 
 #include "QMCWaveFunctions/Jastrow/J1OrbitalSoA.h"
+#include "QMCWaveFunctions/Jastrow/J1SpinOrbitalSoA.h"
 #include "QMCWaveFunctions/Jastrow/J2OrbitalSoA.h"
 
 #if defined(QMC_CUDA)
@@ -21,6 +22,7 @@
 #endif
 
 #include "QMCWaveFunctions/Jastrow/DiffOneBodyJastrowOrbital.h"
+#include "QMCWaveFunctions/Jastrow/DiffOneBodySpinJastrowOrbital.h"
 #include "QMCWaveFunctions/Jastrow/DiffTwoBodyJastrowOrbital.h"
 
 #include "QMCWaveFunctions/Jastrow/RPAJastrow.h"
@@ -104,9 +106,11 @@ public:
 #endif
 #if !defined(QMC_CUDA)
   using J1OrbitalType = J1OrbitalSoA<RadFuncType>;
+  using J1SpinOrbitalType = J1SpinOrbitalSoA<RadFuncType>;
   using J2OrbitalType = J2OrbitalSoA<RadFuncType>;
 #endif
   using DiffJ1OrbitalType = DiffOneBodyJastrowOrbital<RadFuncType>;
+  using DiffJ1SpinOrbitalType = DiffOneBodySpinJastrowOrbital<RadFuncType>;
   using DiffJ2OrbitalType = DiffTwoBodyJastrowOrbital<RadFuncType>;
 };
 
@@ -333,8 +337,14 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ1(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1(xmlNodePtr)");
   using RT                = typename RadFuncType::real_type;
-  using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
-  using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1OrbitalType;
+  if (
+  if (SpinOpt.find("yes") < SpinOpt.size()) {
+    using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1SpinOrbitalType;
+    using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1SpinOrbitalType;
+  } else {
+    using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
+    using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1OrbitalType;
+  }
 
   XMLAttrString input_name(cur, "name");
   std::string jname = input_name.empty() ? Jastfunction : input_name;
