@@ -27,7 +27,7 @@ namespace qmcplusplus
  *  @brief Specialization for two-body Jastrow function using multiple functors
  */
 template<class FT>
-class DiffOneBodyJastrowOrbital : public DiffWaveFunctionComponent
+class DiffOneBodySpinJastrowOrbital : public DiffWaveFunctionComponent
 {
   ///number of variables this object handles
   int NumVars;
@@ -50,13 +50,13 @@ class DiffOneBodyJastrowOrbital : public DiffWaveFunctionComponent
 
 public:
   ///constructor
-  DiffOneBodyJastrowOrbital(const ParticleSet& centers, ParticleSet& els)
+  DiffOneBodySpinJastrowOrbital(const ParticleSet& centers, ParticleSet& els)
       : NumVars(0), myTableIndex(els.addTable(centers)), CenterRef(centers)
   {
     NumPtcls = els.getTotalNum();
   }
 
-  ~DiffOneBodyJastrowOrbital()
+  ~DiffOneBodySpinJastrowOrbital()
   {
     delete_iter(gradLogPsi.begin(), gradLogPsi.end());
     delete_iter(lapLogPsi.begin(), lapLogPsi.end());
@@ -251,7 +251,7 @@ public:
 
   DiffWaveFunctionComponentPtr makeClone(ParticleSet& tqp) const
   {
-    DiffOneBodyJastrowOrbital<FT>* j1copy = new DiffOneBodyJastrowOrbital<FT>(CenterRef, tqp);
+    DiffOneBodySpinJastrowOrbital<FT>* j1copy = new DiffOneBodySpinJastrowOrbital<FT>(CenterRef, tqp);
     for (int i = 0; i < Funique.size(); ++i)
     {
       if (Funique[i])

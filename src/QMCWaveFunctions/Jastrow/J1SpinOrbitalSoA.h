@@ -26,7 +26,7 @@ namespace qmcplusplus
  *  @brief Specialization for one-body Jastrow function using multiple functors
  */
 template<class FT>
-struct J1OrbitalSoA : public WaveFunctionComponent
+struct J1SpinOrbitalSoA : public WaveFunctionComponent
 {
   ///alias FuncType
   using FuncType = FT;
@@ -62,17 +62,17 @@ struct J1OrbitalSoA : public WaveFunctionComponent
   ///Container for \f$F[ig*NumGroups+jg]\f$
   std::vector<FT*> F;
 
-  J1OrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
-      : WaveFunctionComponent("J1OrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions)
+  J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
+      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions)
   {
     if (myName.empty())
-      throw std::runtime_error("J1OrbitalSoA object name cannot be empty!");
+      throw std::runtime_error("J1SpinOrbitalSoA object name cannot be empty!");
     initialize(els);
   }
 
-  J1OrbitalSoA(const J1OrbitalSoA& rhs) = delete;
+  J1SpinOrbitalSoA(const J1SpinOrbitalSoA& rhs) = delete;
 
-  ~J1OrbitalSoA()
+  ~J1SpinOrbitalSoA()
   {
     for (int i = 0; i < F.size(); ++i)
       if (F[i] != nullptr)
@@ -367,7 +367,7 @@ struct J1OrbitalSoA : public WaveFunctionComponent
 
   WaveFunctionComponentPtr makeClone(ParticleSet& tqp) const
   {
-    J1OrbitalSoA<FT>* j1copy = new J1OrbitalSoA<FT>(myName, Ions, tqp);
+    J1SpinOrbitalSoA<FT>* j1copy = new J1SpinOrbitalSoA<FT>(myName, Ions, tqp);
     j1copy->Optimizable      = Optimizable;
     for (size_t i = 0, n = F.size(); i < n; ++i)
     {
