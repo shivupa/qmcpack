@@ -12,8 +12,8 @@
 //////////////////////////////////////////////////////////////////////////////////////
 
 
-#ifndef QMCPLUSPLUS_DIFFERENTIAL_ONEBODYJASTROW_H
-#define QMCPLUSPLUS_DIFFERENTIAL_ONEBODYJASTROW_H
+#ifndef QMCPLUSPLUS_DIFFERENTIAL_ONEBODYSPINJASTROW_H
+#define QMCPLUSPLUS_DIFFERENTIAL_ONEBODYSPINJASTROW_H
 #include "Configuration.h"
 #include "QMCWaveFunctions/DiffWaveFunctionComponent.h"
 #include "Particle/DistanceTableData.h"
@@ -33,6 +33,10 @@ class DiffOneBodySpinJastrowOrbital : public DiffWaveFunctionComponent
   int NumVars;
   ///number of target particles
   int NumPtcls;
+  ///number of groups for the sources, e.g., for the atomic centers
+  int NumSourceGroups;
+  ///number of groupsfor the targets, e.g., for the up/down electrons
+  int NumTargetGroups;
   ///index of the table
   const int myTableIndex;
   ///reference to the ions
@@ -40,9 +44,9 @@ class DiffOneBodySpinJastrowOrbital : public DiffWaveFunctionComponent
   ///variables handled by this orbital
   opt_variables_type myVars;
   ///container for the Jastrow functions  for all the pairs
-  std::vector<FT*> Fs;
+  std::vector<FT*> F;
   ///container for the unique Jastrow functions
-  std::vector<FT*> Funique;
+  std::map<std::string, FT*> J1Unique;
   std::vector<std::pair<int, int>> OffSet;
   Vector<RealType> dLogPsi;
   std::vector<GradVectorType*> gradLogPsi;
@@ -53,7 +57,10 @@ public:
   DiffOneBodySpinJastrowOrbital(const ParticleSet& centers, ParticleSet& els)
       : NumVars(0), myTableIndex(els.addTable(centers)), CenterRef(centers)
   {
-    NumPtcls = els.getTotalNum();
+    NumPtcls        = els.getTotalNum();
+    NumTargetGroups = els.groups();
+    NumSourceGroups = CenterRef.groups();
+    F.resize(NumSourceGroups * NumTargetGroups, 0);
   }
 
   ~DiffOneBodySpinJastrowOrbital()
@@ -68,39 +75,47 @@ public:
    */
   void addFunc(int source_type, FT* afunc, int target_type = -1)
   {
-    if (Fs.empty())
-    {
-      Fs.resize(CenterRef.getTotalNum(), 0);
-      Funique.resize(CenterRef.getSpeciesSet().size(), 0);
-    }
-    for (int i = 0; i < Fs.size(); i++)
-      if (CenterRef.GroupID[i] == source_type)
-        Fs[i] = afunc;
-    Funique[source_type] = afunc;
+    //   u   d   p
+    // O Ou  Od  Op
+    // H Hu  Hd  Hp
+
+    // make all pair terms for a certain atom equal to first atom - first specified target initially in case some terms are not provided explicitly
+    // e.g. if atomA-spin1 speicified first in input and atomA-spin0 and atomA-spin(2-...) will all equal atomA-spin1 (unless provided explicitly)
+    for (int j = 0; j < NumTargetGroups; ++j)
+      if (F[source_type * NumTargetGroups + j] == nullptr)
+        F[source_type * NumTargetGroups + j] = afunc;
+    F[source_type * NumTargetGroups + target_type] = afunc;
+    std::stringstream aname;
+    aname << source_type << target_type;
+    J1Unique[aname.str()] = afunc;
   }
 
 
   ///reset the value of all the unique Two-Body Jastrow functions
   void resetParameters(const opt_variables_type& active)
   {
-    for (int i = 0; i < Funique.size(); ++i)
-      if (Funique[i])
-        Funique[i]->resetParameters(active);
+    typename std::map<std::string, FT*>::iterator it(J1Unique.begin()), it_end(J1Unique.end());
+    while (it != it_end)
+    {
+      (*it++).second->resetParameters(active);
+    }
   }
 
   void checkOutVariables(const opt_variables_type& active)
   {
     myVars.clear();
-    for (int i = 0; i < Funique.size(); ++i)
+    typename std::map<std::string, FT*>::iterator it(J1Unique.begin()), it_end(J1Unique.end());
+    while (it != it_end)
     {
-      if (Funique[i])
-      {
-        Funique[i]->myVars.getIndex(active);
-        myVars.insertFrom(Funique[i]->myVars);
-      }
+      (*it).second->myVars.getIndex(active);
+      myVars.insertFrom((*it).second->myVars);
+      ++it;
     }
+    myVars.removeInactive();
+
     myVars.getIndex(active);
     NumVars = myVars.size();
+    myVars.print(std::cout);
     if (NumVars && dLogPsi.size() == 0)
     {
       dLogPsi.resize(NumVars);
@@ -111,14 +126,25 @@ public:
         gradLogPsi[i] = new GradVectorType(NumPtcls);
         lapLogPsi[i]  = new ValueVectorType(NumPtcls);
       }
-      OffSet.resize(Fs.size());
-      int varoffset = myVars.Index[0];
-      for (int i = 0; i < Fs.size(); ++i)
+      OffSet.resize(F.size());
+      // Find first active variable for the starting offset
+      int varoffset = -1;
+      for (int i = 0; i < myVars.size(); i++)
       {
-        if (Fs[i])
+        varoffset = myVars.Index[i];
+        if (varoffset != -1)
+          break;
+      }
+      for (int i = 0; i < F.size(); ++i)
+      {
+        if (F[i] && F[i]->myVars.Index.size())
         {
-          OffSet[i].first  = Fs[i]->myVars.Index.front() - varoffset;
-          OffSet[i].second = Fs[i]->myVars.Index.size() + OffSet[i].first;
+          OffSet[i].first  = F[i]->myVars.Index.front() - varoffset;
+          OffSet[i].second = F[i]->myVars.Index.size() + OffSet[i].first;
+        }
+        else
+        {
+          OffSet[i].first = OffSet[i].second = -1;
         }
       }
     }
@@ -190,7 +216,7 @@ public:
 
       for (size_t i = 0; i < ns; ++i)
       {
-        FT* func = Fs[i];
+        FT* func = F[i];
         if (func == 0)
           continue;
         int first(OffSet[i].first);
@@ -252,12 +278,35 @@ public:
   DiffWaveFunctionComponentPtr makeClone(ParticleSet& tqp) const
   {
     DiffOneBodySpinJastrowOrbital<FT>* j1copy = new DiffOneBodySpinJastrowOrbital<FT>(CenterRef, tqp);
-    for (int i = 0; i < Funique.size(); ++i)
+    std::map<const FT*, FT*> fcmap;
+    for (int ig = 0; ig < NumSourceGroups; ++ig)
+      for (int jg = ig; jg < NumTargetGroups; ++jg)
+      {
+        int ij = ig * NumTargetGroups + jg;
+        if (F[ij] == 0)
+          continue;
+        typename std::map<const FT*, FT*>::iterator fit = fcmap.find(F[ij]);
+        if (fit == fcmap.end())
+        {
+          FT* fc = new FT(*F[ij]);
+          j1copy->addFunc(ig, fc, jg);
+          fcmap[F[ij]] = fc;
+        }
+      }
+    j1copy->myVars.clear();
+    j1copy->myVars.insertFrom(myVars);
+    j1copy->NumVars         = NumVars;
+    j1copy->NumPtcls        = NumPtcls;
+    j1copy->NumSourceGroups = NumSourceGroups;
+    j1copy->NumTargetGroups = NumTargetGroups;
+    j1copy->dLogPsi.resize(NumVars);
+    j1copy->gradLogPsi.resize(NumVars, 0);
+    j1copy->lapLogPsi.resize(NumVars, 0);
+    for (int i = 0; i < NumVars; ++i)
     {
-      if (Funique[i])
-        j1copy->addFunc(i, new FT(*Funique[i]), -1);
+      j1copy->gradLogPsi[i] = new GradVectorType(NumPtcls);
+      j1copy->lapLogPsi[i]  = new ValueVectorType(NumPtcls);
     }
-    j1copy->setVars(myVars);
     j1copy->OffSet = OffSet;
     return j1copy;
   }
