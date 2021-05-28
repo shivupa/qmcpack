@@ -75,12 +75,12 @@ public:
    */
   void addFunc(int source_type, FT* afunc, int target_type = -1)
   {
-    //   u   d   p
-    // O Ou  Od  Op
-    // H Hu  Hd  Hp
+    //   S0    S1   S2
+    // A A-S0  A-S1 A-S2
+    // B B-S0  B-S1 B-S2
 
     // make all pair terms for a certain atom equal to first atom - first specified target initially in case some terms are not provided explicitly
-    // e.g. if atomA-spin1 speicified first in input and atomA-spin0 and atomA-spin(2-...) will all equal atomA-spin1 (unless provided explicitly)
+    // e.g. if atomA-spin1 specified first in input and atomA-spin0 and atomA-spin(2-...) will all equal atomA-spin1 (unless provided explicitly)
     for (int j = 0; j < NumTargetGroups; ++j)
       if (F[source_type * NumTargetGroups + j] == nullptr)
         F[source_type * NumTargetGroups + j] = afunc;
