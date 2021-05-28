@@ -57,6 +57,9 @@ private:
   WaveFunctionComponent* createJ1(xmlNodePtr cur);
 
   template<class RadFuncType>
+  WaveFunctionComponent* createJ1Spin(xmlNodePtr cur);
+
+  template<class RadFuncType>
   WaveFunctionComponent* createJ2(xmlNodePtr cur);
 
   template<class RadFuncType>

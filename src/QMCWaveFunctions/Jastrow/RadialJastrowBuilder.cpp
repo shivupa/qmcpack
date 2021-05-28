@@ -89,10 +89,12 @@ template<class RadFuncType>
 class JastrowTypeHelper
 {
 public:
-  using J1OrbitalType     = J1OrbitalSoA<RadFuncType>;
-  using J2OrbitalType     = J2OrbitalSoA<RadFuncType>;
-  using DiffJ1OrbitalType = DiffOneBodyJastrowOrbital<RadFuncType>;
-  using DiffJ2OrbitalType = DiffTwoBodyJastrowOrbital<RadFuncType>;
+  using J1OrbitalType         = J1OrbitalSoA<RadFuncType>;
+  using J1SpinOrbitalType     = J1SpinOrbitalSoA<RadFuncType>;
+  using J2OrbitalType         = J2OrbitalSoA<RadFuncType>;
+  using DiffJ1OrbitalType     = DiffOneBodyJastrowOrbital<RadFuncType>;
+  using DiffJ1SpinOrbitalType = DiffOneBodySpinJastrowOrbital<RadFuncType>;
+  using DiffJ2OrbitalType     = DiffTwoBodyJastrowOrbital<RadFuncType>;
 };
 
 template<>
@@ -105,13 +107,13 @@ public:
   using J2OrbitalType = TwoBodyJastrowOrbitalBspline<RadFuncType>;
 #endif
 #if !defined(QMC_CUDA)
-  using J1OrbitalType = J1OrbitalSoA<RadFuncType>;
+  using J1OrbitalType     = J1OrbitalSoA<RadFuncType>;
   using J1SpinOrbitalType = J1SpinOrbitalSoA<RadFuncType>;
-  using J2OrbitalType = J2OrbitalSoA<RadFuncType>;
+  using J2OrbitalType     = J2OrbitalSoA<RadFuncType>;
 #endif
-  using DiffJ1OrbitalType = DiffOneBodyJastrowOrbital<RadFuncType>;
+  using DiffJ1OrbitalType     = DiffOneBodyJastrowOrbital<RadFuncType>;
   using DiffJ1SpinOrbitalType = DiffOneBodySpinJastrowOrbital<RadFuncType>;
-  using DiffJ2OrbitalType = DiffTwoBodyJastrowOrbital<RadFuncType>;
+  using DiffJ2OrbitalType     = DiffTwoBodyJastrowOrbital<RadFuncType>;
 };
 
 template<class RadFuncType>
@@ -160,8 +162,8 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ2(xmlNodePtr cur)
   XMLAttrString input_name(cur, "name");
   std::string j2name = input_name.empty() ? "J2_" + Jastfunction : input_name;
   SpeciesSet& species(targetPtcl.getSpeciesSet());
-  auto* J2   = new J2OrbitalType(j2name, targetPtcl);
-  auto* dJ2  = new DiffJ2OrbitalType(targetPtcl);
+  auto* J2  = new J2OrbitalType(j2name, targetPtcl);
+  auto* dJ2 = new DiffJ2OrbitalType(targetPtcl);
 
   std::string init_mode("0");
   {
@@ -337,14 +339,8 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ1(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1(xmlNodePtr)");
   using RT                = typename RadFuncType::real_type;
-  if (
-  if (SpinOpt.find("yes") < SpinOpt.size()) {
-    using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1SpinOrbitalType;
-    using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1SpinOrbitalType;
-  } else {
-    using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
-    using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1OrbitalType;
-  }
+  using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
+  using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1OrbitalType;
 
   XMLAttrString input_name(cur, "name");
   std::string jname = input_name.empty() ? Jastfunction : input_name;
@@ -393,6 +389,95 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ1(xmlNodePtr cur)
                   true);
       }
       app_summary() << "    Radial function for element: " << speciesA << std::endl;
+      functor->put(kids);
+      app_summary() << std::endl;
+      J1->addFunc(ig, functor, jg);
+      dJ1->addFunc(ig, functor, jg);
+      success = true;
+      if (is_manager())
+      {
+        char fname[128];
+        if (speciesB.size())
+          sprintf(fname, "%s.%s.%s%s.g%03d.dat", jname.c_str(), NameOpt.c_str(), speciesA.c_str(), speciesB.c_str(),
+                  getGroupID());
+        else
+          sprintf(fname, "%s.%s.%s.g%03d.dat", jname.c_str(), NameOpt.c_str(), speciesA.c_str(), getGroupID());
+        std::ofstream os(fname);
+        print(*functor, os);
+      }
+    }
+    kids = kids->next;
+  }
+  if (success)
+  {
+    J1->dPsi = dJ1;
+    J1->setOptimizable(Opt);
+    return J1;
+  }
+  else
+  {
+    PRE.error("BsplineJastrowBuilder failed to add an One-Body Jastrow.");
+    delete J1;
+    delete dJ1;
+    return nullptr;
+  }
+}
+
+template<class RadFuncType>
+WaveFunctionComponent* RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
+{
+  ReportEngine PRE(ClassName, "createJ1(xmlNodePtr)");
+  using RT                = typename RadFuncType::real_type;
+  using J1OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J1SpinOrbitalType;
+  using DiffJ1OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ1SpinOrbitalType;
+
+  XMLAttrString input_name(cur, "name");
+  std::string jname = input_name.empty() ? Jastfunction : input_name;
+
+  J1OrbitalType* J1      = new J1OrbitalType(jname, *SourcePtcl, targetPtcl);
+  DiffJ1OrbitalType* dJ1 = new DiffJ1OrbitalType(*SourcePtcl, targetPtcl);
+
+  xmlNodePtr kids = cur->xmlChildrenNode;
+
+  // Find the number of the source species
+  SpeciesSet& sSet = SourcePtcl->getSpeciesSet();
+  SpeciesSet& tSet = targetPtcl.getSpeciesSet();
+  bool success     = false;
+  bool Opt(true);
+  while (kids != NULL)
+  {
+    std::string kidsname = (char*)kids->name;
+    tolower(kidsname);
+    if (kidsname == "correlation")
+    {
+      std::string speciesA;
+      std::string speciesB;
+      RealType cusp(0);
+      OhmmsAttributeSet rAttrib;
+      rAttrib.add(speciesA, "elementType");
+      rAttrib.add(speciesA, "speciesA");
+      rAttrib.add(speciesB, "speciesB");
+      rAttrib.add(cusp, "cusp");
+      rAttrib.put(kids);
+      auto* functor = new RadFuncType();
+      functor->setPeriodic(SourcePtcl->Lattice.SuperCellEnum != SUPERCELL_OPEN);
+      functor->cutoff_radius = targetPtcl.Lattice.WignerSeitzRadius;
+      functor->setCusp(cusp);
+      const int ig = sSet.findSpecies(speciesA);
+      const int jg = speciesB.size() ? tSet.findSpecies(speciesB) : -1;
+      if (ig == sSet.getTotalNum())
+      {
+        PRE.error("species " + speciesA + " requested for Jastrow " + jname + " does not exist in ParticleSet " +
+                      SourcePtcl->getName(),
+                  true);
+      }
+      if (jg == tSet.getTotalNum())
+      {
+        PRE.error("species " + speciesB + " requested for Jastrow " + jname + " does not exist in ParticleSet " +
+                      targetPtcl.getName(),
+                  true);
+      }
+      app_summary() << "    Radial function for species: " << speciesA << " - " << speciesB << std::endl;
       functor->put(kids);
       app_summary() << std::endl;
       J1->addFunc(ig, functor, jg);
@@ -531,21 +616,49 @@ WaveFunctionComponent* RadialJastrowBuilder::buildComponent(xmlNodePtr cur)
     // it's a one body jastrow factor
     if (Jastfunction == "bspline")
     {
-      return createJ1<BsplineFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<BsplineFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<BsplineFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "pade")
     {
       guardAgainstPBC();
-      return createJ1<PadeFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<PadeFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<PadeFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "shortrangecusp")
     {
       //guardAgainstPBC(); // is this needed?
-      return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<ShortRangeCuspFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "user")
     {
-      return createJ1<UserFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<UserFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<UserFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "rpa")
     {
