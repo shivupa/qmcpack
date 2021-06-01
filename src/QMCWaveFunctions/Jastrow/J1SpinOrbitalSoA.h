@@ -9,8 +9,8 @@
 // File created by: Jeongnim Kim, jeongnim.kim@intel.com, Intel Corp.
 //////////////////////////////////////////////////////////////////////////////////////
 // -*- C++ -*-
-#ifndef QMCPLUSPLUS_ONEBODYJASTROW_OPTIMIZED_SOA_H
-#define QMCPLUSPLUS_ONEBODYJASTROW_OPTIMIZED_SOA_H
+#ifndef QMCPLUSPLUS_ONEBODYSPINJASTROW_OPTIMIZED_SOA_H
+#define QMCPLUSPLUS_ONEBODYSPINJASTROW_OPTIMIZED_SOA_H
 #include "Configuration.h"
 #include "QMCWaveFunctions/WaveFunctionComponent.h"
 #include "QMCWaveFunctions/Jastrow/DiffOneBodyJastrowOrbital.h"
@@ -43,8 +43,10 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   int Nions;
   ///number of electrons
   int Nelec;
-  ///number of groups
-  int NumGroups;
+  ///number of groups for the sources, e.g., for the atomic centers
+  int NumSourceGroups;
+  ///number of groupsfor the targets, e.g., for the up/down electrons
+  int NumTargetGroups;
   ///reference to the sources (ions)
   const ParticleSet& Ions;
 
@@ -61,6 +63,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   Vector<valT> Lap;
   ///Container for \f$F[ig*NumGroups+jg]\f$
   std::vector<FT*> F;
+  ///Unique J1 set
+  std::map<std::string, std::unique_ptr<FT>> J1Unique;
 
   J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
       : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions)
@@ -82,14 +86,15 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   /* initialize storage */
   void initialize(const ParticleSet& els)
   {
-    Nions     = Ions.getTotalNum();
-    NumGroups = Ions.getSpeciesSet().getTotalNum();
-    F.resize(std::max(NumGroups, 4), nullptr);
-    if (NumGroups > 1 && !Ions.IsGrouped)
-    {
-      NumGroups = 0;
-    }
-    Nelec = els.getTotalNum();
+    Nions           = Ions.getTotalNum();
+    Nelec           = els.getTotalNum();
+    NumSourceGroups = Ions.getSpeciesSet().getTotalNum();
+    NumTargetGroups = els.groups();
+    F.resize(NumSourceGroups * NumTargetGroups, nullptr);
+    //if (NumSourceGroups > 1 && !Ions.IsGrouped) is this necessary?
+    //{
+    //  NumSourceGroups = 0;
+    //}
     Vat.resize(Nelec);
     Grad.resize(Nelec);
     Lap.resize(Nelec);
@@ -104,9 +109,17 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
 
   void addFunc(int source_type, FT* afunc, int target_type = -1)
   {
-    if (F[source_type] != nullptr)
-      delete F[source_type];
-    F[source_type] = afunc;
+    // make all pair terms for a certain atom equal to first atom - first specified target initially in case some terms are not provided explicitly
+    // e.g. if atomA-spin1 specified first in input and atomA-spin0 and atomA-spin(2-...) will all equal atomA-spin1 (unless provided explicitly)
+    for (int j = 0; j < NumTargetGroups; ++j)
+      if (F[source_type * NumTargetGroups + j] == nullptr)
+        F[source_type * NumTargetGroups + j] = afunc;
+    std::stringstream aname;
+    aname << source_type << target_type;
+    J1Unique[aname.str()] = std::unique_ptr<FT>(afunc);
+    //if (F[source_type] != nullptr)
+    //  delete F[source_type];
+    F[source_type * NumTargetGroups + target_type] = afunc;
   }
 
   void recompute(const ParticleSet& P)
@@ -120,7 +133,9 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     }
   }
 
-  LogValueType evaluateLog(const ParticleSet& P, ParticleSet::ParticleGradient_t& G, ParticleSet::ParticleLaplacian_t& L)
+  LogValueType evaluateLog(const ParticleSet& P,
+                           ParticleSet::ParticleGradient_t& G,
+                           ParticleSet::ParticleLaplacian_t& L)
   {
     return evaluateGL(P, G, L, true);
   }
@@ -157,63 +172,54 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   PsiValueType ratio(ParticleSet& P, int iat)
   {
     UpdateMode = ORB_PBYP_RATIO;
-    curAt      = computeU(P.getDistTable(myTableID).getTempDists());
+    curAt      = computeU(P, iat, P.getDistTable(myTableID).getTempDists());
     return std::exp(static_cast<PsiValueType>(Vat[iat] - curAt));
   }
 
   inline void evaluateRatios(const VirtualParticleSet& VP, std::vector<ValueType>& ratios)
   {
     for (int k = 0; k < ratios.size(); ++k)
-      ratios[k] = std::exp(Vat[VP.refPtcl] - computeU(VP.getDistTable(myTableID).getDistRow(k)));
+      ratios[k] = std::exp(Vat[VP.refPtcl] - computeU(VP.refPS, VP.refPtcl, VP.getDistTable(myTableID).getDistRow(k)));
   }
 
-  inline valT computeU(const DistRow& dist)
+  inline valT computeU(const ParticleSet& P, int iat, const DistRow& dist)
   {
-    valT curVat(0);
-    if (NumGroups > 0)
+    valT curUat(0);
+    const int igt = P.GroupID[iat] * NumTargetGroups;
+    for (int jg = 0; jg < NumTargetGroups; ++jg)
     {
-      for (int jg = 0; jg < NumGroups; ++jg)
-      {
-        if (F[jg] != nullptr)
-          curVat += F[jg]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(), DistCompressed.data());
-      }
+      const FuncType& f1(*F[igt + jg]);
+      int iStart = P.first(jg);
+      int iEnd   = P.last(jg);
+      curUat += f1.evaluateV(iat, iStart, iEnd, dist.data(), DistCompressed.data());
     }
-    else
-    {
-      for (int c = 0; c < Nions; ++c)
-      {
-        int gid = Ions.GroupID[c];
-        if (F[gid] != nullptr)
-          curVat += F[gid]->evaluate(dist[c]);
-      }
-    }
-    return curVat;
+    return curUat;
   }
 
   void evaluateRatiosAlltoOne(ParticleSet& P, std::vector<ValueType>& ratios)
   {
-    const auto& dist = P.getDistTable(myTableID).getTempDists();
-    curAt            = valT(0);
-    if (NumGroups > 0)
-    {
-      for (int jg = 0; jg < NumGroups; ++jg)
-      {
-        if (F[jg] != nullptr)
-          curAt += F[jg]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(), DistCompressed.data());
-      }
-    }
-    else
-    {
-      for (int c = 0; c < Nions; ++c)
-      {
-        int gid = Ions.GroupID[c];
-        if (F[gid] != nullptr)
-          curAt += F[gid]->evaluate(dist[c]);
-      }
-    }
+    const auto& d_table = P.getDistTable(myTableID);
+    const auto& dist    = d_table.getTempDists();
 
-    for (int i = 0; i < Nelec; ++i)
-      ratios[i] = std::exp(Vat[i] - curAt);
+    for (int ig = 0; ig < NumSourceGroups; ++ig)
+    {
+      const int igt = ig * NumTargetGroups;
+      valT sumU(0);
+      for (int jg = 0; jg < NumTargetGroups; ++jg)
+      {
+        const FuncType& f1(*F[igt + jg]);
+        int iStart = P.first(jg);
+        int iEnd   = P.last(jg);
+        sumU += f1.evaluateV(-1, iStart, iEnd, dist.data(), DistCompressed.data());
+      }
+
+      for (int i = P.first(ig); i < P.last(ig); ++i)
+      {
+        // remove self-interaction
+        const valT Uself = F[igt + ig]->evaluate(dist[i]);
+        ratios[i]        = std::exp(Vat[i] + Uself - sumU);
+      }
+    }
   }
 
   inline LogValueType evaluateGL(const ParticleSet& P,
@@ -225,9 +231,10 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       recompute(P);
 
     for (size_t iat = 0; iat < Nelec; ++iat)
+    {
       G[iat] += Grad[iat];
-    for (size_t iat = 0; iat < Nelec; ++iat)
       L[iat] -= Lap[iat];
+    }
     return LogValue = -simd::accumulate_n(Vat.data(), Nelec, valT());
   }
 
@@ -260,32 +267,19 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
    */
   inline void computeU3(const ParticleSet& P, int iat, const DistRow& dist)
   {
-    if (NumGroups > 0)
-    { //ions are grouped
-      constexpr valT czero(0);
-      std::fill_n(U.data(), Nions, czero);
-      std::fill_n(dU.data(), Nions, czero);
-      std::fill_n(d2U.data(), Nions, czero);
+    constexpr valT czero(0);
+    std::fill_n(U.data(), Nions, czero);
+    std::fill_n(dU.data(), Nions, czero);
+    std::fill_n(d2U.data(), Nions, czero);
 
-      for (int jg = 0; jg < NumGroups; ++jg)
-      {
-        if (F[jg] == nullptr)
-          continue;
-        F[jg]->evaluateVGL(-1, Ions.first(jg), Ions.last(jg), dist.data(), U.data(), dU.data(), d2U.data(),
-                           DistCompressed.data(), DistIndice.data());
-      }
-    }
-    else
+    const int igt = P.GroupID[iat] * NumTargetGroups;
+    for (int jg = 0; jg < NumTargetGroups; ++jg)
     {
-      for (int c = 0; c < Nions; ++c)
-      {
-        int gid = Ions.GroupID[c];
-        if (F[gid] != nullptr)
-        {
-          U[c] = F[gid]->evaluate(dist[c], dU[c], d2U[c]);
-          dU[c] /= dist[c];
-        }
-      }
+      const FuncType& f1(*F[igt + jg]);
+      int iStart = P.first(jg);
+      int iEnd   = std::min(Nions, P.last(jg));
+      f1.evaluateVGL(iat, iStart, iEnd, dist.data(), U.data(), dU.data(), d2U.data(), DistCompressed.data(),
+                     DistIndice.data());
     }
   }
 
@@ -368,7 +362,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   WaveFunctionComponentPtr makeClone(ParticleSet& tqp) const
   {
     J1SpinOrbitalSoA<FT>* j1copy = new J1SpinOrbitalSoA<FT>(myName, Ions, tqp);
-    j1copy->Optimizable      = Optimizable;
+    j1copy->Optimizable          = Optimizable;
     for (size_t i = 0, n = F.size(); i < n; ++i)
     {
       if (F[i] != nullptr)
@@ -394,22 +388,24 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   void checkInVariables(opt_variables_type& active)
   {
     myVars.clear();
-    for (size_t i = 0, n = F.size(); i < n; ++i)
+    auto it(J1Unique.begin()), it_end(J1Unique.end());
+    while (it != it_end)
     {
-      if (F[i] != nullptr)
-      {
-        F[i]->checkInVariables(active);
-        F[i]->checkInVariables(myVars);
-      }
+      (*it).second->checkInVariables(active);
+      (*it).second->checkInVariables(myVars);
+      ++it;
     }
   }
   void checkOutVariables(const opt_variables_type& active)
   {
     myVars.getIndex(active);
     Optimizable = myVars.is_optimizable();
-    for (size_t i = 0, n = F.size(); i < n; ++i)
-      if (F[i] != nullptr)
-        F[i]->checkOutVariables(active);
+    auto it(J1Unique.begin()), it_end(J1Unique.end());
+    while (it != it_end)
+    {
+      (*it).second->checkOutVariables(active);
+      ++it;
+    }
     if (dPsi)
       dPsi->checkOutVariables(active);
   }
@@ -418,18 +414,20 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   {
     if (!Optimizable)
       return;
-    for (size_t i = 0, n = F.size(); i < n; ++i)
-      if (F[i] != nullptr)
-        F[i]->resetParameters(active);
-
+    auto it(J1Unique.begin()), it_end(J1Unique.end());
+    while (it != it_end)
+    {
+      (*it).second->resetParameters(active);
+      ++it;
+    }
+    if (dPsi)
+      dPsi->resetParameters(active);
     for (int i = 0; i < myVars.size(); ++i)
     {
       int ii = myVars.Index[i];
       if (ii >= 0)
-        myVars[i] = active[ii];
+       myVars[i] = active[ii];
     }
-    if (dPsi)
-      dPsi->resetParameters(active);
   }
   /**@} */
 
