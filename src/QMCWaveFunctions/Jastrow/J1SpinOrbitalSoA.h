@@ -49,6 +49,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   int NumTargetGroups;
   ///reference to the sources (ions)
   const ParticleSet& Ions;
+  ///reference to the targets (electrons)
+  ParticleSet& Elecs;
 
   valT curAt;
   valT curLap;
@@ -67,7 +69,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   std::map<std::string, std::unique_ptr<FT>> J1Unique;
 
   J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
-      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions)
+      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions), Elecs(els)
   {
     if (myName.empty())
       throw std::runtime_error("J1SpinOrbitalSoA object name cannot be empty!");
@@ -87,9 +89,9 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   void initialize(const ParticleSet& els)
   {
     Nions           = Ions.getTotalNum();
-    Nelec           = els.getTotalNum();
-    NumSourceGroups = Ions.getSpeciesSet().getTotalNum();
-    NumTargetGroups = els.groups();
+    Nelec           = Elecs.getTotalNum();
+    NumSourceGroups = Ions.groups();
+    NumTargetGroups = Elecs.groups();
     F.resize(NumSourceGroups * NumTargetGroups, nullptr);
     //if (NumSourceGroups > 1 && !Ions.IsGrouped) is this necessary?
     //{
@@ -155,7 +157,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       const auto& displ = d_ie.getDisplRow(iel);
       for (int iat = 0; iat < Nions; iat++)
       {
-        int gid    = Ions.GroupID[iat];
+        int gid    = Ions.GroupID[iat] * NumTargetGroups + Elecs.GroupID[iel];
         auto* func = F[gid];
         if (func != nullptr)
         {
@@ -278,8 +280,10 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       const FuncType& f1(*F[igt + jg]);
       int iStart = P.first(jg);
       int iEnd   = std::min(Nions, P.last(jg));
+      app_log() << "iStart  iEnd  iat" << iStart << " "  << iEnd << " " << iat << std::endl;
       f1.evaluateVGL(iat, iStart, iEnd, dist.data(), U.data(), dU.data(), d2U.data(), DistCompressed.data(),
                      DistIndice.data());
+      app_log() << "OK" << std::endl;
     }
   }
 
@@ -439,7 +443,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       const auto& dist  = d_ie.getDistRow(iat);
       const auto& displ = d_ie.getDisplRow(iat);
-      int gid           = source.GroupID[isrc];
+      int gid           = source.GroupID[isrc] * NumTargetGroups + P.GroupID[iat];
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
@@ -465,7 +469,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       const auto& dist  = d_ie.getDistRow(iat);
       const auto& displ = d_ie.getDisplRow(iat);
-      int gid           = source.GroupID[isrc];
+      int gid           = source.GroupID[isrc] * NumTargetGroups + P.GroupID[iat];
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
