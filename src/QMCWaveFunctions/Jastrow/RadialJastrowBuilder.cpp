@@ -13,6 +13,7 @@
 #include "RadialJastrowBuilder.h"
 
 #include "QMCWaveFunctions/Jastrow/J1OrbitalSoA.h"
+#include "QMCWaveFunctions/Jastrow/J1SpinOrbitalSoA.h"
 #include "QMCWaveFunctions/Jastrow/J2OrbitalSoA.h"
 
 #if defined(ENABLE_OFFLOAD)
@@ -128,6 +129,8 @@ void RadialJastrowBuilder::guardAgainstPBC()
     app_error() << "periodic boundary conditions, please choose other forms of Jastrow\n";
   }
 }
+class RPAFunctor
+{};
 
 template<class RadFuncType>
 void RadialJastrowBuilder::initTwoBodyFunctor(RadFuncType& functor, double fac)
@@ -512,6 +515,90 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1<RPAFunctor
   return J1;
 }
 
+template<class RadFuncType>
+WaveFunctionComponent* RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
+{
+  ReportEngine PRE(ClassName, "createJ1Spin(xmlNodePtr)");
+  using RT            = typename RadFuncType::real_type;
+  using J1OrbitalType = typename JastrowTypeHelper<RadFuncType>::J1SpinOrbitalType;
+
+  XMLAttrString input_name(cur, "name");
+  std::string jname = input_name.empty() ? Jastfunction : input_name;
+
+  J1OrbitalType* J1 = new J1OrbitalType(jname, *SourcePtcl, targetPtcl);
+
+  xmlNodePtr kids = cur->xmlChildrenNode;
+
+  // Find the number of the source species
+  SpeciesSet& sSet = SourcePtcl->getSpeciesSet();
+  SpeciesSet& tSet = targetPtcl.getSpeciesSet();
+  bool success     = false;
+  bool Opt(true);
+  while (kids != NULL)
+  {
+    std::string kidsname = (char*)kids->name;
+    tolower(kidsname);
+    if (kidsname == "correlation")
+    {
+      std::string speciesA;
+      std::string speciesB;
+      RealType cusp(0);
+      OhmmsAttributeSet rAttrib;
+      rAttrib.add(speciesA, "elementType");
+      rAttrib.add(speciesA, "speciesA");
+      rAttrib.add(speciesB, "speciesB");
+      rAttrib.add(cusp, "cusp");
+      rAttrib.put(kids);
+      auto functor = std::make_unique<RadFuncType>();
+      functor->setPeriodic(SourcePtcl->Lattice.SuperCellEnum != SUPERCELL_OPEN);
+      functor->cutoff_radius = targetPtcl.Lattice.WignerSeitzRadius;
+      functor->setCusp(cusp);
+      const int ig = sSet.findSpecies(speciesA);
+      const int jg = speciesB.size() ? tSet.findSpecies(speciesB) : -1;
+      if (ig == sSet.getTotalNum())
+      {
+        PRE.error("species " + speciesA + " requested for Jastrow " + jname + " does not exist in ParticleSet " +
+                      SourcePtcl->getName(),
+                  true);
+      }
+      if (jg == tSet.getTotalNum())
+      {
+        PRE.error("species " + speciesB + " requested for Jastrow " + jname + " does not exist in ParticleSet " +
+                      targetPtcl.getName(),
+                  true);
+      }
+      app_summary() << "    Radial function for species: " << speciesA << " - " << speciesB << std::endl;
+      functor->put(kids);
+      app_summary() << std::endl;
+      if (is_manager())
+      {
+        char fname[128];
+        if (speciesB.size())
+          sprintf(fname, "%s.%s.%s%s.g%03d.dat", jname.c_str(), NameOpt.c_str(), speciesA.c_str(), speciesB.c_str(),
+                  getGroupID());
+        else
+          sprintf(fname, "%s.%s.%s.g%03d.dat", jname.c_str(), NameOpt.c_str(), speciesA.c_str(), getGroupID());
+        std::ofstream os(fname);
+        print(*functor.get(), os);
+      }
+      J1->addFunc(ig, std::move(functor), jg);
+      success = true;
+    }
+    kids = kids->next;
+  }
+  if (success)
+  {
+    J1->setOptimizable(Opt);
+    return J1;
+  }
+  else
+  {
+    PRE.error("BsplineJastrowBuilder failed to add an One-Body Jastrow.");
+    delete J1;
+    return nullptr;
+  }
+}
+
 
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlNodePtr cur)
 {
@@ -539,16 +626,34 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     // it's a one body jastrow factor
     if (Jastfunction == "bspline")
     {
+<<<<<<< HEAD
 #if defined(QMC_CUDA)
       return createJ1<BsplineFunctor<RealType>, detail::CUDA_LEGACY>(cur);
 #else
       return createJ1<BsplineFunctor<RealType>>(cur);
 #endif
+=======
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<BsplineFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<BsplineFunctor<RealType>>(cur);
+      }
+>>>>>>> b2df9b6ff (Adding J1Spin in radialjastrowbuilder)
     }
     else if (Jastfunction == "pade")
     {
       guardAgainstPBC();
-      return createJ1<PadeFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<PadeFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<PadeFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "pade2")
     {
@@ -558,11 +663,25 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     else if (Jastfunction == "shortrangecusp")
     {
       //guardAgainstPBC(); // is this needed?
-      return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<ShortRangeCuspFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "user")
     {
-      return createJ1<UserFunctor<RealType>>(cur);
+      if (SpinOpt.find("yes") < SpinOpt.size())
+      {
+        return createJ1Spin<UserFunctor<RealType>>(cur);
+      }
+      else
+      {
+        return createJ1<UserFunctor<RealType>>(cur);
+      }
     }
     else if (Jastfunction == "rpa")
     {
