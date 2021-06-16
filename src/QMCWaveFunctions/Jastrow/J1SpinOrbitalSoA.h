@@ -92,9 +92,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
 
   ~J1SpinOrbitalSoA()
   {
-    for (int i = 0; i < J1Unique.size(); ++i)
-      if (F[i] != nullptr)
-        J1Unique[i].reset();
+    for (auto& J1Uniqueptr : J1Unique)
+      J1Uniqueptr.reset();
     delete_iter(gradLogPsi.begin(), gradLogPsi.end());
     delete_iter(lapLogPsi.begin(), lapLogPsi.end());
   }
@@ -126,14 +125,14 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   void addFunc(int source_type, std::unique_ptr<FT> afunc, int target_type = -1)
   {
     // if target type is not specified F[i,:] is assigned if F[i,j] is nullptr
-    // if target type is specified F[i,j] is assigned 
-    app_log() << " source" << source_type << " target type " << target_type << std::endl; 
-      for (int i = 0; i < F.size(); i++)
-        if (Ions.GroupID[i] == source_type && F[i] == nullptr)
-         F[i] = afunc.get();
-      //if (J1Unique[source_type] != nullptr)
-      //  delete J1Unique[source_type];
-      J1Unique[source_type] = std::move(afunc);
+    // if target type is specified F[i,j] is assigned
+    app_log() << " source" << source_type << " target type " << target_type << std::endl;
+    for (int i = 0; i < F.size(); i++)
+      if (Ions.GroupID[i] == source_type && F[i] == nullptr)
+        F[i] = afunc.get();
+    //if (J1Unique[source_type] != nullptr)
+    //  delete J1Unique[source_type];
+    J1Unique[source_type] = std::move(afunc);
   }
 
   void recompute(const ParticleSet& P)
@@ -169,7 +168,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       const auto& displ = d_ie.getDisplRow(iel);
       for (int iat = 0; iat < Nions; iat++)
       {
-        int gid    = Ions.GroupID[iat];
+        int gid    = Ions.getGroupID(iat);
         auto* func = J1Unique[gid].get();
         if (func != nullptr)
         {
@@ -321,7 +320,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       for (int c = 0; c < Nions; ++c)
       {
-        int gid = Ions.GroupID[c];
+        int gid = Ions.getGroupID(c);
         if (J1Unique[gid] != nullptr)
           curVat += J1Unique[gid]->evaluate(dist[c]);
       }
@@ -345,7 +344,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       for (int c = 0; c < Nions; ++c)
       {
-        int gid = Ions.GroupID[c];
+        int gid = Ions.getGroupID(c);
         if (J1Unique[gid] != nullptr)
           curAt += J1Unique[gid]->evaluate(dist[c]);
       }
@@ -418,7 +417,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       for (int c = 0; c < Nions; ++c)
       {
-        int gid = Ions.GroupID[c];
+        int gid = Ions.getGroupID(c);
         if (J1Unique[gid] != nullptr)
         {
           U[c] = J1Unique[gid]->evaluate(dist[c], dU[c], d2U[c]);
@@ -524,12 +523,12 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   WaveFunctionComponentPtr makeClone(ParticleSet& tqp) const
   {
     J1SpinOrbitalSoA<FT>* j1copy = new J1SpinOrbitalSoA<FT>(myName, Ions, tqp);
-    j1copy->Optimizable      = Optimizable;
+    j1copy->Optimizable          = Optimizable;
     for (size_t i = 0, n = J1Unique.size(); i < n; ++i)
     {
       if (J1Unique[i] != nullptr)
       {
-        auto fc = std::make_unique<FT>(*F[i]);
+        auto fc = std::make_unique<FT>(*J1Unique[i].get());
         j1copy->addFunc(i, std::move(fc));
       }
     }
@@ -625,12 +624,12 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       const auto& dist  = d_ie.getDistRow(iat);
       const auto& displ = d_ie.getDisplRow(iat);
-      int gid           = source.GroupID[isrc];
+      int gid           = source.getGroupID(isrc);
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
 
-      if (F[gid] != nullptr)
+      if (J1Unique[gid] != nullptr)
       {
         U[isrc] = J1Unique[gid]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
         g_return -= dU[isrc] * rinv * dr;
@@ -651,12 +650,12 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       const auto& dist  = d_ie.getDistRow(iat);
       const auto& displ = d_ie.getDisplRow(iat);
-      int gid           = source.GroupID[isrc];
+      int gid           = source.getGroupID(isrc);
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
 
-      if (F[gid] != nullptr)
+      if (J1Unique[gid] != nullptr)
       {
         U[isrc] = J1Unique[gid]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
       }
