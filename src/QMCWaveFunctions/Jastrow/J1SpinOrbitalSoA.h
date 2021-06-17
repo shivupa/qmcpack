@@ -52,6 +52,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   int NumGroups;
   ///reference to the sources (ions)
   const ParticleSet& Ions;
+  ///reference to the target (elecs)
+  const ParticleSet& Elecs;
 
   ///number of variables this object handles
   int NumVars;
@@ -73,7 +75,6 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   std::vector<FT*> F;
   ///container for the unique Jastrow functions
   std::map<std::string, std::unique_ptr<FT>> J1Unique;
-  std::vector<std::unique_ptr<FT>> J1Unique;
 
   std::vector<std::pair<int, int>> OffSet;
   Vector<RealType> dLogPsi;
@@ -81,11 +82,11 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   std::vector<ValueVectorType*> lapLogPsi;
 
   J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
-      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions), NumVars(0)
+      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name), myTableID(els.addTable(ions)), Ions(ions), Elecs(els), NumVars(0)
   {
     if (myName.empty())
       throw std::runtime_error("J1SpinOrbitalSoA object name cannot be empty!");
-    initialize(els);
+    initialize();
   }
 
   J1SpinOrbitalSoA(const J1SpinOrbitalSoA& rhs) = delete;
@@ -99,17 +100,17 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   }
 
   /* initialize storage */
-  void initialize(const ParticleSet& els)
+  void initialize()
   {
     Nions     = Ions.getTotalNum();
+    Nelec = Elecs.getTotalNum();
     NumGroups = Ions.groups();
-    F.resize(NumGroups * els.groups(), nullptr);
-    J1Unique.resize(NumGroups * els.groups());
+    F.resize(Nions * Nelec, nullptr);
+    J1Unique.resize(NumGroups * Elecs.groups());
     if (NumGroups > 1 && !Ions.IsGrouped)
     {
       NumGroups = 0;
     }
-    Nelec = els.getTotalNum();
     Vat.resize(Nelec);
     Grad.resize(Nelec);
     Lap.resize(Nelec);
@@ -124,15 +125,34 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
 
   void addFunc(int source_type, std::unique_ptr<FT> afunc, int target_type = -1)
   {
-    // if target type is not specified F[i,:] is assigned if F[i,j] is nullptr
+    // if target type is not specified F[i,:] is assigned 
     // if target type is specified F[i,j] is assigned
+    //
+    // if target type is not specified J1Unique["i"] is assigned 
+    // if target type is specified J1Unique["ij"] is assigned
+    // 
     app_log() << " source" << source_type << " target type " << target_type << std::endl;
-    for (int i = 0; i < F.size(); i++)
-      if (Ions.GroupID[i] == source_type && F[i] == nullptr)
-        F[i] = afunc.get();
+    if (target_type == -1) {
+    for (int i = 0; i < Nions; i++)
+      for (int j = 0; i < Nelec; i++)
+        if (Ions.GroupID[i] == source_type && F[i] == nullptr)
+          F[i * Nelec + j] = afunc.get();
     //if (J1Unique[source_type] != nullptr)
     //  delete J1Unique[source_type];
-    J1Unique[source_type] = std::move(afunc);
+    std::stringstream aname;
+    aname << source_type;
+    J1Unique[aname.str()] = std::move(afunc);
+    } else {
+    for (int i = 0; i < Nions; i++)
+      for (int j = 0; i < Nelec; i++)
+        if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type && F[i] == nullptr)
+          F[i * Nelec + j] = afunc.get();
+    //if (J1Unique[source_type] != nullptr)
+    //  delete J1Unique[source_type];
+    std::stringstream aname;
+    aname << source_type << target_type;
+    J1Unique[aname.str()] = std::move(afunc);
+    }
   }
 
   void recompute(const ParticleSet& P)
