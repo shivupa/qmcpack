@@ -143,7 +143,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       for (int i = 0; i < Nions; i++)
         for (int j = 0; i < Nelec; i++)
-          if (Ions.GroupID[i] == source_type && F[i] == nullptr)
+          if (Ions.GroupID[i] == source_type && F[i * Nelec] == nullptr)
             F[i * Nelec + j] = afunc.get();
       //if (J1Unique[source_type] != nullptr)
       //  delete J1Unique[source_type];
@@ -154,8 +154,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     else
     {
       for (int i = 0; i < Nions; i++)
-        for (int j = 0; i < Nelec; i++)
-          if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type && F[i] == nullptr)
+        for (int j = 0; j < Nelec; j++)
+          if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type && F[i * Nelec + j] == nullptr)
             F[i * Nelec + j] = afunc.get();
       //if (J1Unique[source_type] != nullptr)
       //  delete J1Unique[source_type];
@@ -305,7 +305,11 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
             recalcFunc = true;
         if (recalcFunc)
         {
-          size_t nn = d_table.get_neighbors(i, func->cutoff_radius, iadj.data(), dist.data(), displ.data());
+          double cutoff_radius = 0.0;
+          for (size_t j = 0; j < nt; ++j)
+            if (F[i * Nelec + j] != nullptr)
+              cutoff_radius = std::max(cutoff_radius, F[i * Nelec + j]->cutoff_radius);
+          size_t nn = d_table.get_neighbors(i, cutoff_radius, iadj.data(), dist.data(), displ.data());
           for (size_t nj = 0; nj < nn; ++nj)
           {
             FT* func = F[i * Nelec + nj];
@@ -697,6 +701,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       }
     }
     myVars.getIndex(active);
+    //myVars.removeInactive();
     NumVars = myVars.size();
     if (NumVars && dLogPsi.size() == 0)
     {
@@ -709,13 +714,25 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
         lapLogPsi[i]  = new ValueVectorType(Nelec);
       }
       OffSet.resize(F.size());
-      int varoffset = myVars.Index[0];
+      // Find first active variable for the starting offset
+      int varoffset = -1;
+      for (int i = 0; i < myVars.size(); i++)
+      {
+        varoffset = myVars.Index[i];
+        if (varoffset != -1)
+          break;
+      }
+
       for (int i = 0; i < F.size(); ++i)
       {
-        if (F[i] != nullptr)
+        if (F[i] && F[i]->myVars.Index.size())
         {
           OffSet[i].first  = F[i]->myVars.Index.front() - varoffset;
           OffSet[i].second = F[i]->myVars.Index.size() + OffSet[i].first;
+        }
+        else
+        {
+          OffSet[i].first = OffSet[i].second = -1;
         }
       }
     }
