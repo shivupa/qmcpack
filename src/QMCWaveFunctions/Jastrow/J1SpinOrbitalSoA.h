@@ -142,8 +142,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     if (target_type == -1)
     {
       for (int i = 0; i < Nions; i++)
-        for (int j = 0; i < Nelec; i++)
-          if (Ions.GroupID[i] == source_type && F[i * Nelec] == nullptr)
+        for (int j = 0; j < Nelec; j++)
+          if (Ions.GroupID[i] == source_type && F[i * Nelec + j] == nullptr)
             F[i * Nelec + j] = afunc.get();
       //if (J1Unique[source_type] != nullptr)
       //  delete J1Unique[source_type];
@@ -297,20 +297,20 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
 
       for (size_t i = 0; i < ns; ++i)
       {
-        int first(OffSet[i].first);
-        int last(OffSet[i].second);
-        bool recalcFunc(false);
-        for (int rcs = first; rcs < last; rcs++)
-          if (rcsingles[rcs] == true)
-            recalcFunc = true;
-        if (recalcFunc)
+        double cutoff_radius = 0.0;
+        for (size_t j = 0; j < nt; ++j)
+          if (F[i * Nelec + j] != nullptr)
+            cutoff_radius = std::max(cutoff_radius, F[i * Nelec + j]->cutoff_radius);
+        size_t nn = d_table.get_neighbors(i, cutoff_radius, iadj.data(), dist.data(), displ.data());
+        for (size_t nj = 0; nj < nn; ++nj)
         {
-          double cutoff_radius = 0.0;
-          for (size_t j = 0; j < nt; ++j)
-            if (F[i * Nelec + j] != nullptr)
-              cutoff_radius = std::max(cutoff_radius, F[i * Nelec + j]->cutoff_radius);
-          size_t nn = d_table.get_neighbors(i, cutoff_radius, iadj.data(), dist.data(), displ.data());
-          for (size_t nj = 0; nj < nn; ++nj)
+          int first(OffSet[i * Nelec + nj].first);
+          int last(OffSet[i * Nelec + nj].second);
+          bool recalcFunc(false);
+          for (int rcs = first; rcs < last; rcs++)
+            if (rcsingles[rcs] == true)
+              recalcFunc = true;
+          if (recalcFunc)
           {
             FT* func = F[i * Nelec + nj];
             if (func == nullptr)
@@ -701,8 +701,9 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
       }
     }
     myVars.getIndex(active);
-    //myVars.removeInactive();
+    // myVars.removeInactive();
     NumVars = myVars.size();
+    myVars.print(std::cout);
     if (NumVars && dLogPsi.size() == 0)
     {
       dLogPsi.resize(NumVars);
