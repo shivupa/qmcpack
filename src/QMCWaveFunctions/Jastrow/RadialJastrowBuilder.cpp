@@ -171,15 +171,21 @@ template<class RadFuncType, unsigned Implementation>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ2(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ2(xmlNodePtr)");
+<<<<<<< HEAD
   using Real                = typename RadFuncType::real_type;
   using J2OrbitalType     = typename JastrowTypeHelper<RadFuncType, Implementation>::J2OrbitalType;
   using DiffJ2OrbitalType = typename JastrowTypeHelper<RadFuncType, Implementation>::DiffJ2OrbitalType;
+=======
+  using Real              = typename RadFuncType::real_type;
+  using J2OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J2OrbitalType;
+  using DiffJ2OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ2OrbitalType;
+>>>>>>> 124c2d5f0 (Update with respect to #3243)
 
   XMLAttrString input_name(cur, "name");
   std::string j2name = input_name.empty() ? "J2_" + Jastfunction : input_name;
   SpeciesSet& species(targetPtcl.getSpeciesSet());
-  auto J2   = std::make_unique<J2OrbitalType>(j2name, targetPtcl);
-  auto dJ2  = std::make_unique<DiffJ2OrbitalType>(targetPtcl);
+  auto J2  = std::make_unique<J2OrbitalType>(j2name, targetPtcl);
+  auto dJ2 = std::make_unique<DiffJ2OrbitalType>(targetPtcl);
 
   std::string init_mode("0");
   {
@@ -355,13 +361,18 @@ template<class RadFuncType, unsigned Implementation>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1(xmlNodePtr)");
+<<<<<<< HEAD
   using Real            = typename RadFuncType::real_type;
   using J1OrbitalType = typename JastrowTypeHelper<RadFuncType, Implementation>::J1OrbitalType;
+=======
+  using Real          = typename RadFuncType::real_type;
+  using J1OrbitalType = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
+>>>>>>> 124c2d5f0 (Update with respect to #3243)
 
   XMLAttrString input_name(cur, "name");
   std::string jname = input_name.empty() ? Jastfunction : input_name;
 
-  auto J1                = std::make_unique<J1OrbitalType>(jname, *SourcePtcl, targetPtcl);
+  auto J1 = std::make_unique<J1OrbitalType>(jname, *SourcePtcl, targetPtcl);
 
   xmlNodePtr kids = cur->xmlChildrenNode;
 
@@ -447,7 +458,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1(xmlNodePtr
 template<>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1<RPAFunctor>(xmlNodePtr cur)
 {
-  using Real               = RealType;
+  using Real             = RealType;
   using SplineEngineType = CubicBspline<Real, LINEAR_1DGRID, FIRSTDERIV_CONSTRAINTS>;
   using RadFunctorType   = CubicSplineSingle<Real, SplineEngineType>;
   using GridType         = LinearGrid<Real>;
@@ -492,18 +503,18 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1<RPAFunctor
   }
   myHandler->Breakup(targetPtcl, Rs);
 
-  Real Rcut          = myHandler->get_rc() - 0.1;
+  Real Rcut        = myHandler->get_rc() - 0.1;
   GridType* myGrid = new GridType;
   int npts         = static_cast<int>(Rcut / 0.01) + 1;
   myGrid->set(0, Rcut, npts);
 
   //create the numerical functor
-  auto nfunc                     = std::make_unique<RadFunctorType>();
+  auto nfunc                       = std::make_unique<RadFunctorType>();
   ShortRangePartAdapter<Real>* SRA = new ShortRangePartAdapter<Real>(myHandler);
   SRA->setRmax(Rcut);
   nfunc->initialize(SRA, myGrid);
 
-  auto J1                = std::make_unique<J1OrbitalType>(jname, *SourcePtcl, targetPtcl);
+  auto J1 = std::make_unique<J1OrbitalType>(jname, *SourcePtcl, targetPtcl);
 
   SpeciesSet& sSet = SourcePtcl->getSpeciesSet();
   for (int ig = 0; ig < sSet.getTotalNum(); ig++)
@@ -516,7 +527,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1<RPAFunctor
 }
 
 template<class RadFuncType>
-WaveFunctionComponent* RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
+std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1Spin(xmlNodePtr)");
   using RT            = typename RadFuncType::real_type;
@@ -525,7 +536,7 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
   XMLAttrString input_name(cur, "name");
   std::string jname = input_name.empty() ? Jastfunction : input_name;
 
-  J1OrbitalType* J1 = new J1OrbitalType(jname, *SourcePtcl, targetPtcl);
+  std::unique_ptr<J1OrbitalType> J1 = std::make_unique<J1OrbitalType>(jname, *SourcePtcl, targetPtcl);
 
   xmlNodePtr kids = cur->xmlChildrenNode;
 
@@ -594,8 +605,7 @@ WaveFunctionComponent* RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
   else
   {
     PRE.error("BsplineJastrowBuilder failed to add an One-Body Jastrow.");
-    delete J1;
-    return nullptr;
+    return std::unique_ptr<WaveFunctionComponent>();
   }
 }
 

@@ -87,7 +87,7 @@ TEST_CASE("J1 spin evaluate derivatives Jastrow", "[wavefunction]")
   twf.evaluateLog(elec_);
   twf.prepareGroup(elec_, 0);
 
-  auto twf_component_list = twf.getOrbitals();
+  auto& twf_component_list = twf.getOrbitals();
 
   opt_variables_type active;
   twf.checkInVariables(active);
@@ -102,8 +102,8 @@ TEST_CASE("J1 spin evaluate derivatives Jastrow", "[wavefunction]")
   twf_component_list[0]->evaluateDerivatives(elec_, active, dlogpsi, dhpsioverpsi);
 
   // Numbers not validated
-  std::vector<ValueType> expected_dlogpsi      = {-0.9336294487, -1.0196051794, 0.0, 0.0};
-  std::vector<ValueType> expected_dhpsioverpsi = {-1.1596433096, 0.7595492539, 0.0, 0.0};
+  std::vector<ValueType> expected_dlogpsi      = {-0.46681472435, -0.5098025897, -0.46681472435, -0.5098025897};
+  std::vector<ValueType> expected_dhpsioverpsi = {-0.5798216548, 0.37977462695, -0.5798216548, 0.37977462695};
   for (int i = 0; i < nparam; i++)
   {
     CHECK(dlogpsi[i] == ValueApprox(expected_dlogpsi[i]));

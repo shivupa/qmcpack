@@ -78,7 +78,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   ///Container for \f$F[ig*NIons+jg]\f$
   std::vector<FT*> J1Functors;
   ///container for the unique Jastrow functions
-  std::vector<std::unique_ptr<FT>> J1UniqueFunctors;
+  std::map<std::string, std::unique_ptr<FT>> J1UniqueFunctors;
 
   std::vector<std::pair<int, int>> OffSet;
   Vector<RealType> dLogPsi;
@@ -90,7 +90,10 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
       : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name),
         myTableID(els.addTable(ions)),
-	Nions(ions.getTotalNum()), Nelec(els.getTotalNum()), NumTargetGroups(determineNumGroups(ions)), NumTargetGroups(determineNumGroups(els)),
+        Nions(ions.getTotalNum()),
+        Nelec(els.getTotalNum()),
+        NumGroups(determineNumGroups(ions)),
+        NumTargetGroups(determineNumGroups(els)),
         Ions(ions),
         Elecs(els),
         NumVars(0)
@@ -123,12 +126,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   /* initialize storage */
   void initialize()
   {
-    Nions           = Ions.getTotalNum();
-    Nelec           = Elecs.getTotalNum();
-    NumGroups       = Ions.groups();
-    NumTargetGroups = Elecs.groups();
     J1Functors.resize(Nions * Nelec, nullptr);
-    J1UniqueFunctors.resize(NumGroups * NumTargetGroups);
     Vat.resize(Nelec);
     Grad.resize(Nelec);
     Lap.resize(Nelec);
@@ -166,7 +164,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
     {
       for (int i = 0; i < Nions; i++)
         for (int j = 0; j < Nelec; j++)
-          if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type && J1Functors[i * Nelec + j] == nullptr)
+          if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type &&
+              J1Functors[i * Nelec + j] == nullptr)
             J1Functors[i * Nelec + j] = afunc.get();
       //if (J1UniqueFunctors[source_type] != nullptr)
       //  delete J1UniqueFunctors[source_type];
@@ -372,8 +371,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
           aname << jg;
         }
         if (J1UniqueFunctors[aname.str()] != nullptr)
-          curVat +=
-              J1UniqueFunctors[aname.str()]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(), DistCompressed.data());
+          curVat += J1UniqueFunctors[aname.str()]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(),
+                                                             DistCompressed.data());
       }
     }
     else
@@ -414,8 +413,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
           }
 
           if (J1UniqueFunctors[gid.str()] != nullptr)
-            curAt +=
-                J1UniqueFunctors[gid.str()]->evaluateV(-1, Ions.first(ig), Ions.last(ig), dist.data(), DistCompressed.data());
+            curAt += J1UniqueFunctors[gid.str()]->evaluateV(-1, Ions.first(ig), Ions.last(ig), dist.data(),
+                                                            DistCompressed.data());
         }
       }
     }
@@ -505,7 +504,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
         if (J1UniqueFunctors[gid.str()] == nullptr)
           continue;
         J1UniqueFunctors[gid.str()]->evaluateVGL(-1, Ions.first(jg), Ions.last(jg), dist.data(), U.data(), dU.data(),
-                                         d2U.data(), DistCompressed.data(), DistIndice.data());
+                                                 d2U.data(), DistCompressed.data(), DistIndice.data());
       }
     }
     else
@@ -621,10 +620,10 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   }
 
 
-  WaveFunctionComponentPtr makeClone(ParticleSet& tqp) const override
+  std::unique_ptr<WaveFunctionComponent> makeClone(ParticleSet& tqp) const override
   {
-    J1SpinOrbitalSoA<FT>* j1copy = std::make_unique<J1SpinOrbitalSoA<FT>>(myName, Ions, tqp);
-    j1copy->Optimizable          = Optimizable;
+    auto j1copy         = std::make_unique<J1SpinOrbitalSoA<FT>>(myName, Ions, tqp);
+    j1copy->Optimizable = Optimizable;
     if (NumGroups > 0)
     {
       for (int i = 0; i < NumGroups; i++)
@@ -724,7 +723,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
         gradLogPsi[i] = new WavefunctionFirstDerivativeType(Nelec);
         lapLogPsi[i]  = new WavefunctionSecondDerivativeType(Nelec);
       }
-      OffSet.resize(F.size());
+      OffSet.resize(J1Functors.size());
       // Find first active variable for the starting offset
       int varoffset = -1;
       for (int i = 0; i < myVars.size(); i++)
@@ -734,12 +733,12 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
           break;
       }
 
-      for (int i = 0; i < F.size(); ++i)
+      for (int i = 0; i < J1Functors.size(); ++i)
       {
-        if (F[i] && F[i]->myVars.Index.size())
+        if (J1Functors[i] && J1Functors[i]->myVars.Index.size())
         {
-          OffSet[i].first  = F[i]->myVars.Index.front() - varoffset;
-          OffSet[i].second = F[i]->myVars.Index.size() + OffSet[i].first;
+          OffSet[i].first  = J1Functors[i]->myVars.Index.front() - varoffset;
+          OffSet[i].second = J1Functors[i]->myVars.Index.size() + OffSet[i].first;
         }
         else
         {
