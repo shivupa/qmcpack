@@ -91,7 +91,7 @@ TEST_CASE("J1 spin evaluate derivatives Jastrow", "[wavefunction]")
 
   opt_variables_type active;
   twf.checkInVariables(active);
-
+  active.removeInactive();
   int nparam = active.size_of_active();
   REQUIRE(nparam == 4);
 

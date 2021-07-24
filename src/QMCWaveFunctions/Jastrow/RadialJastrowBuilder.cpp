@@ -171,15 +171,9 @@ template<class RadFuncType, unsigned Implementation>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ2(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ2(xmlNodePtr)");
-<<<<<<< HEAD
   using Real                = typename RadFuncType::real_type;
   using J2OrbitalType     = typename JastrowTypeHelper<RadFuncType, Implementation>::J2OrbitalType;
   using DiffJ2OrbitalType = typename JastrowTypeHelper<RadFuncType, Implementation>::DiffJ2OrbitalType;
-=======
-  using Real              = typename RadFuncType::real_type;
-  using J2OrbitalType     = typename JastrowTypeHelper<RadFuncType>::J2OrbitalType;
-  using DiffJ2OrbitalType = typename JastrowTypeHelper<RadFuncType>::DiffJ2OrbitalType;
->>>>>>> 124c2d5f0 (Update with respect to #3243)
 
   XMLAttrString input_name(cur, "name");
   std::string j2name = input_name.empty() ? "J2_" + Jastfunction : input_name;
@@ -637,6 +631,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     if (Jastfunction == "bspline")
     {
 <<<<<<< HEAD
+<<<<<<< HEAD
 #if defined(QMC_CUDA)
       return createJ1<BsplineFunctor<RealType>, detail::CUDA_LEGACY>(cur);
 #else
@@ -644,6 +639,9 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
 #endif
 =======
       if (SpinOpt.find("yes") < SpinOpt.size())
+=======
+      if (SpinOpt == "yes")
+>>>>>>> 5897b8cf0 (Edits)
       {
         return createJ1Spin<BsplineFunctor<RealType>>(cur);
       }
@@ -656,7 +654,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     else if (Jastfunction == "pade")
     {
       guardAgainstPBC();
-      if (SpinOpt.find("yes") < SpinOpt.size())
+      if (SpinOpt == "yes")
       {
         return createJ1Spin<PadeFunctor<RealType>>(cur);
       }
@@ -673,7 +671,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     else if (Jastfunction == "shortrangecusp")
     {
       //guardAgainstPBC(); // is this needed?
-      if (SpinOpt.find("yes") < SpinOpt.size())
+      if (SpinOpt == "yes")
       {
         return createJ1Spin<ShortRangeCuspFunctor<RealType>>(cur);
       }
@@ -684,7 +682,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     }
     else if (Jastfunction == "user")
     {
-      if (SpinOpt.find("yes") < SpinOpt.size())
+      if (SpinOpt == "yes")
       {
         return createJ1Spin<UserFunctor<RealType>>(cur);
       }
