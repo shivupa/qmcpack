@@ -12,7 +12,7 @@
 #include "catch.hpp"
 
 #include "Particle/ParticleSetPool.h"
-#include "QMCWaveFunctions/Jastrow/J1SpinOrbitalSoA.h"
+#include "QMCWaveFunctions/Jastrow/J1Spin.h"
 #include "QMCWaveFunctions/Jastrow/RadialJastrowBuilder.h"
 #include "QMCWaveFunctions/WaveFunctionFactory.h"
 

@@ -31,7 +31,7 @@ namespace qmcplusplus
  *  @brief Specialization for one-body Jastrow function using multiple functors
  */
 template<class FT>
-struct J1SpinOrbitalSoA : public WaveFunctionComponent
+struct J1Spin : public WaveFunctionComponent
 {
   ///alias FuncType
   using FuncType = FT;
@@ -87,8 +87,8 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
   std::vector<WavefunctionFirstDerivativeType*> gradLogPsi;
   std::vector<WavefunctionSecondDerivativeType*> lapLogPsi;
 
-  J1SpinOrbitalSoA(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
-      : WaveFunctionComponent("J1SpinOrbitalSoA", obj_name),
+  J1Spin(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
+      : WaveFunctionComponent("J1Spin", obj_name),
         myTableID(els.addTable(ions)),
         Nions(ions.getTotalNum()),
         Nelec(els.getTotalNum()),
@@ -99,13 +99,13 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
         NumVars(0)
   {
     if (myName.empty())
-      throw std::runtime_error("J1SpinOrbitalSoA object name cannot be empty!");
+      throw std::runtime_error("J1Spin object name cannot be empty!");
     initialize();
   }
 
-  J1SpinOrbitalSoA(const J1SpinOrbitalSoA& rhs) = delete;
+  J1Spin(const J1Spin& rhs) = delete;
 
-  ~J1SpinOrbitalSoA() override
+  ~J1Spin() override
   {
     delete_iter(gradLogPsi.begin(), gradLogPsi.end());
     delete_iter(lapLogPsi.begin(), lapLogPsi.end());
@@ -622,7 +622,7 @@ struct J1SpinOrbitalSoA : public WaveFunctionComponent
 
   std::unique_ptr<WaveFunctionComponent> makeClone(ParticleSet& tqp) const override
   {
-    auto j1copy         = std::make_unique<J1SpinOrbitalSoA<FT>>(myName, Ions, tqp);
+    auto j1copy         = std::make_unique<J1Spin<FT>>(myName, Ions, tqp);
     j1copy->Optimizable = Optimizable;
     if (NumGroups > 0)
     {
