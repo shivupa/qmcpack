@@ -45,7 +45,7 @@ struct J1Spin : public WaveFunctionComponent
   ///table index
   const int myTableID;
   ///number of ions
-  int Nions;
+  const int Nions;
   ///number of electrons
   const int Nelec;
   /* the number of ion groups if ions in 'Ions' particleset are grouped by species. 0 otherwise.
