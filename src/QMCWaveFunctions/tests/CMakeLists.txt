@@ -95,8 +95,6 @@ set(JASTROW_SRC
     test_J1OrbitalSoA.cpp
     test_J1Spin.cpp
     test_J2_bspline.cpp
-    test_J1SpinOrbitalSoA.cpp
-    test_J2_bspline.cpp
     test_DiffTwoBodyJastrowOrbital.cpp)
 set(DETERMINANT_SRC
     FakeSPO.cpp

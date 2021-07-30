@@ -120,8 +120,6 @@ void RadialJastrowBuilder::guardAgainstPBC()
     app_error() << "periodic boundary conditions, please choose other forms of Jastrow\n";
   }
 }
-class RPAFunctor
-{};
 
 template<class RadFuncType>
 void RadialJastrowBuilder::initTwoBodyFunctor(RadFuncType& functor, double fac)
@@ -346,18 +344,8 @@ template<class RadFuncType, unsigned Implementation>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1(xmlNodePtr)");
-<<<<<<< HEAD
-<<<<<<< HEAD
   using Real            = typename RadFuncType::real_type;
-  using J1OrbitalType = typename JastrowTypeHelper<RadFuncType, Implementation>::J1OrbitalType;
-=======
-  using Real          = typename RadFuncType::real_type;
-  using J1OrbitalType = typename JastrowTypeHelper<RadFuncType>::J1OrbitalType;
->>>>>>> 124c2d5f0 (Update with respect to #3243)
-=======
-  using Real   = typename RadFuncType::real_type;
   using J1Type = typename JastrowTypeHelper<RadFuncType, Implementation>::J1Type;
->>>>>>> d08699cda (Shorten J1 class names.)
 
   XMLAttrString input_name(cur, "name");
   std::string jname = input_name.empty() ? Jastfunction : input_name;
@@ -516,7 +504,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1<RPAFunctor
   return J1;
 }
 
-template<class RadFuncType>
+template<class RadFuncType, unsigned Implementation>
 std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::createJ1Spin(xmlNodePtr cur)
 {
   ReportEngine PRE(ClassName, "createJ1Spin(xmlNodePtr)");
@@ -626,21 +614,7 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
     // it's a one body jastrow factor
     if (Jastfunction == "bspline")
     {
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-#if defined(QMC_CUDA)
-      return createJ1<BsplineFunctor<RealType>, detail::CUDA_LEGACY>(cur);
-#else
-      return createJ1<BsplineFunctor<RealType>>(cur);
-#endif
-=======
-      if (SpinOpt.find("yes") < SpinOpt.size())
-=======
-=======
->>>>>>> d08699cda (Shorten J1 class names.)
       if (SpinOpt == "yes")
->>>>>>> 5897b8cf0 (Edits)
       {
 #if defined(QMC_CUDA)
         return createJ1Spin<BsplineFunctor<RealType>, detail::CUDA_LEGACY>(cur);
@@ -650,16 +624,12 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
       }
       else
       {
-<<<<<<< HEAD
-        return createJ1<BsplineFunctor<RealType>>(cur);
-      }
->>>>>>> b2df9b6ff (Adding J1Spin in radialjastrowbuilder)
-=======
 #if defined(QMC_CUDA)
         return createJ1<BsplineFunctor<RealType>, detail::CUDA_LEGACY>(cur);
 #else
         return createJ1<BsplineFunctor<RealType>>(cur);
 #endif
+      }
     }
     else if (Jastfunction == "pade")
     {
@@ -689,36 +659,6 @@ std::unique_ptr<WaveFunctionComponent> RadialJastrowBuilder::buildComponent(xmlN
       {
         return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
         return createJ1<BsplineFunctor<RealType>>(cur);
-      }
->>>>>>> d08699cda (Shorten J1 class names.)
-    }
-    else if (Jastfunction == "pade")
-    {
-      guardAgainstPBC();
-      if (SpinOpt == "yes")
-      {
-        return createJ1Spin<PadeFunctor<RealType>>(cur);
-      }
-      else
-      {
-        return createJ1<PadeFunctor<RealType>>(cur);
-      }
-    }
-    else if (Jastfunction == "pade2")
-    {
-      guardAgainstPBC();
-      return createJ1<Pade2ndOrderFunctor<RealType>>(cur);
-    }
-    else if (Jastfunction == "shortrangecusp")
-    {
-      //guardAgainstPBC(); // is this needed?
-      if (SpinOpt == "yes")
-      {
-        return createJ1Spin<ShortRangeCuspFunctor<RealType>>(cur);
-      }
-      else
-      {
-        return createJ1<ShortRangeCuspFunctor<RealType>>(cur);
       }
     }
     else if (Jastfunction == "user")
