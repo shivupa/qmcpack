@@ -821,13 +821,9 @@ struct J1Spin : public WaveFunctionComponent
       }
 
       if (J1UniqueFunctors[gid.str()] != nullptr)
-      {
         U[isrc] = J1UniqueFunctors[gid.str()]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
-      }
       else
-      {
-        APP_ABORT("J1OrbitalSoa::evaluateGradSource:  J1UniqueFunctors[gid]==nullptr")
-      }
+        throw std::runtime_error("J1OrbitalSoa::evaluateGradSource:  J1UniqueFunctors[gid]==nullptr");
 
       g_return -= dU[isrc] * rinv * dr;
 
