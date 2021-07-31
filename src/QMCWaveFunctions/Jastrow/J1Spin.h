@@ -56,8 +56,6 @@ struct J1Spin : public WaveFunctionComponent
   const int NumTargetGroups;
   ///reference to the sources (ions)
   const ParticleSet& Ions;
-  ///reference to the target (elecs)
-  const ParticleSet& Elecs;
 
   ///number of variables this object handles
   int NumVars;
@@ -75,17 +73,15 @@ struct J1Spin : public WaveFunctionComponent
   aligned_vector<int> DistIndice;
   Vector<posT> Grad;
   Vector<valT> Lap;
-  ///Container for \f$F[ig*NIons+jg]\f$
-  std::vector<FT*> J1Functors;
-  ///container for the unique Jastrow functions
-  std::map<std::string, std::unique_ptr<FT>> J1UniqueFunctors;
+  ///container for the unique Jastrow functors (size NumGroups x NumTargetGroups)
+  std::vector<std::unique_ptr<FT>> J1UniqueFunctors;
 
   std::vector<std::pair<int, int>> OffSet;
   Vector<RealType> dLogPsi;
   typedef ParticleAttrib<QTFull::GradType> WavefunctionFirstDerivativeType;
   typedef ParticleAttrib<QTFull::ValueType> WavefunctionSecondDerivativeType;
-  std::vector<WavefunctionFirstDerivativeType*> gradLogPsi;
-  std::vector<WavefunctionSecondDerivativeType*> lapLogPsi;
+  std::vector<WavefunctionFirstDerivativeType> gradLogPsi;
+  std::vector<WavefunctionSecondDerivativeType> lapLogPsi;
 
   J1Spin(const std::string& obj_name, const ParticleSet& ions, ParticleSet& els)
       : WaveFunctionComponent("J1Spin", obj_name),
@@ -95,20 +91,34 @@ struct J1Spin : public WaveFunctionComponent
         NumGroups(determineNumGroups(ions)),
         NumTargetGroups(determineNumGroups(els)),
         Ions(ions),
-        Elecs(els),
         NumVars(0)
   {
     if (myName.empty())
       throw std::runtime_error("J1Spin object name cannot be empty!");
-    initialize();
+    initialize(els);
   }
 
   J1Spin(const J1Spin& rhs) = delete;
 
-  ~J1Spin() override
+  J1Spin(const J1Spin& rhs, ParticleSet& tqp)
+      : WaveFunctionComponent("J1Spin", rhs.myName), myTableID(rhs.myTableID),
+        Nions(rhs.Nions),
+        Nelec(rhs.Nelec),
+        NumGroups(rhs.NumGroups),
+        NumTargetGroups(rhs.NumTargetGroups),
+        Ions(rhs.Ions),
+        NumVars(0)
   {
-    delete_iter(gradLogPsi.begin(), gradLogPsi.end());
-    delete_iter(lapLogPsi.begin(), lapLogPsi.end());
+    Optimizable = rhs.Optimizable;
+    for (int i = 0; i < NumGroups; i++)
+      for (int j = 0; j < NumTargetGroups; j++)
+        if (rhs.J1UniqueFunctors[i * NumTargetGroups + j])
+        {
+          auto fc = std::make_unique<FT>(*rhs.J1UniqueFunctors[i * NumTargetGroups + j].get());
+          addFunc(i, std::move(fc), j);
+        }
+    setVars(rhs.myVars);
+    OffSet = rhs.OffSet;
   }
 
   /* determine NumGroups which controls the use of optimized code path using ion groups or not */
@@ -124,9 +134,8 @@ struct J1Spin : public WaveFunctionComponent
   }
 
   /* initialize storage */
-  void initialize()
+  void initialize(ParticleSet& els)
   {
-    J1Functors.resize(Nions * Nelec, nullptr);
     Vat.resize(Nelec);
     Grad.resize(Nelec);
     Lap.resize(Nelec);
@@ -141,37 +150,29 @@ struct J1Spin : public WaveFunctionComponent
 
   void addFunc(int source_type, std::unique_ptr<FT> afunc, int target_type = -1)
   {
-    // if target type is not specified J1Functors[i,:] is assigned
-    // if target type is specified J1Functors[i,j] is assigned
-    //
-    // if target type is not specified J1UniqueFunctors["i"] is assigned
-    // if target type is specified J1UniqueFunctors["ij"] is assigned
-    //
-    app_log() << " source" << source_type << " target type " << target_type << std::endl;
+    // if target type is not specified J1UniqueFunctors[i*NumTargetGroups + (0:NumTargetGroups)] is assigned
+    // if target type is specified J1UniqueFunctors[i*NumTargetGroups + j] is assigned
+    assert(target_type < NumTargetGroups);
     if (target_type == -1)
     {
       for (int i = 0; i < Nions; i++)
-        for (int j = 0; j < Nelec; j++)
-          if (Ions.GroupID[i] == source_type && J1Functors[i * Nelec + j] == nullptr)
-            J1Functors[i * Nelec + j] = afunc.get();
-      //if (J1UniqueFunctors[source_type] != nullptr)
-      //  delete J1UniqueFunctors[source_type];
-      std::stringstream aname;
-      aname << source_type;
-      J1UniqueFunctors[aname.str()] = std::move(afunc);
+        for (int j = 0; j < NumTargetGroups; j++)
+        {
+          auto igroup = Ions.getGroupID(i);
+          if (igroup == source_type && J1UniqueFunctors[igroup * NumTargetGroups + j] == nullptr)
+            J1UniqueFunctors[igroup * NumTargetGroups + j] = std::move(afunc);
+        }
     }
     else
     {
       for (int i = 0; i < Nions; i++)
-        for (int j = 0; j < Nelec; j++)
-          if (Ions.getGroupID(i) == source_type && Elecs.getGroupID(j) == target_type &&
-              J1Functors[i * Nelec + j] == nullptr)
-            J1Functors[i * Nelec + j] = afunc.get();
-      //if (J1UniqueFunctors[source_type] != nullptr)
-      //  delete J1UniqueFunctors[source_type];
-      std::stringstream aname;
-      aname << source_type << target_type;
-      J1UniqueFunctors[aname.str()] = std::move(afunc);
+        for (int j = 0; j < NumTargetGroups; j++)
+        {
+          auto igroup = Ions.getGroupID(i);
+          if (Ions.getGroupID(i) == source_type && j == target_type &&
+              J1UniqueFunctors[i * NumTargetGroups + j] == nullptr)
+            J1UniqueFunctors[igroup * Nelec + j] = std::move(afunc);
+        }
     }
   }
 
@@ -208,14 +209,8 @@ struct J1Spin : public WaveFunctionComponent
       const auto& displ = d_ie.getDisplRow(iel);
       for (int iat = 0; iat < Nions; iat++)
       {
-        std::stringstream gid;
-        gid << Ions.getGroupID(iat) << P.getGroupID(iel);
-        if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
-        {
-          gid.str() = "";
-          gid << Ions.getGroupID(iat);
-        }
-        auto* func = J1UniqueFunctors[gid.str()].get();
+        auto gid   = Ions.getGroupID(iat) * NumTargetGroups + P.getGroupID(iel);
+        auto* func = J1UniqueFunctors[gid].get();
         if (func != nullptr)
         {
           RealType r    = dist[iat];
@@ -267,7 +262,7 @@ struct J1Spin : public WaveFunctionComponent
           continue;
         if (rcsingles[k])
         {
-          dhpsioverpsi[kk] = -RealType(0.5) * ValueType(Sum(*lapLogPsi[k])) - ValueType(Dot(P.G, *gradLogPsi[k]));
+          dhpsioverpsi[kk] = -RealType(0.5) * ValueType(Sum(lapLogPsi[k])) - ValueType(Dot(P.G, gradLogPsi[k]));
         }
       }
     }
@@ -291,9 +286,9 @@ struct J1Spin : public WaveFunctionComponent
       const auto& d_table = P.getDistTable(myTableID);
       dLogPsi             = 0.0;
       for (int p = 0; p < NumVars; ++p)
-        (*gradLogPsi[p]) = 0.0;
+        gradLogPsi[p] = 0.0;
       for (int p = 0; p < NumVars; ++p)
-        (*lapLogPsi[p]) = 0.0;
+        lapLogPsi[p] = 0.0;
       std::vector<TinyVector<RealType, 3>> derivs(NumVars);
 
       constexpr RealType cone(1);
@@ -309,20 +304,24 @@ struct J1Spin : public WaveFunctionComponent
       {
         double cutoff_radius = 0.0;
         for (size_t j = 0; j < nt; ++j)
-          if (J1Functors[i * Nelec + j] != nullptr)
-            cutoff_radius = std::max(cutoff_radius, J1Functors[i * Nelec + j]->cutoff_radius);
+        {
+          auto functor_idx = Ions.getGroupID(i) * NumTargetGroups + P.getGroupID(j);
+          if (J1UniqueFunctors[i * Nelec + j] != nullptr)
+            cutoff_radius = std::max(cutoff_radius, J1UniqueFunctors[functor_idx]->cutoff_radius);
+        }
         size_t nn = d_table.get_neighbors(i, cutoff_radius, iadj.data(), dist.data(), displ.data());
         for (size_t nj = 0; nj < nn; ++nj)
         {
-          int first(OffSet[i * Nelec + nj].first);
-          int last(OffSet[i * Nelec + nj].second);
+          auto functor_idx = Ions.getGroupID(i) * NumTargetGroups + P.getGroupID(nj);
+          int first(OffSet[functor_idx].first);
+          int last(OffSet[functor_idx].second);
           bool recalcFunc(false);
           for (int rcs = first; rcs < last; rcs++)
             if (rcsingles[rcs] == true)
               recalcFunc = true;
           if (recalcFunc)
           {
-            FT* func = J1Functors[i * Nelec + nj];
+            auto* func = J1UniqueFunctors[functor_idx].get();
             if (func == nullptr)
               continue;
             std::fill(derivs.begin(), derivs.end(), 0);
@@ -335,8 +334,8 @@ struct J1Spin : public WaveFunctionComponent
             {
               dLogPsi[p] -= derivs[ip][0];
               RealType dudr(rinv * derivs[ip][1]);
-              (*gradLogPsi[p])[j] -= dudr * dr;
-              (*lapLogPsi[p])[j] -= derivs[ip][2] + lapfac * dudr;
+              gradLogPsi[p][j] -= dudr * dr;
+              lapLogPsi[p][j] -= derivs[ip][2] + lapfac * dudr;
             }
           }
         }
@@ -360,35 +359,21 @@ struct J1Spin : public WaveFunctionComponent
     valT curVat(0);
     if (NumGroups > 0)
     {
-      std::stringstream aname;
       for (int jg = 0; jg < NumGroups; ++jg)
       {
-        aname.str() = "";
-        aname << jg << P.getGroupID(iat);
-        if (J1UniqueFunctors.find(aname.str()) == J1UniqueFunctors.end())
-        {
-          aname.str() = "";
-          aname << jg;
-        }
-        if (J1UniqueFunctors[aname.str()] != nullptr)
-          curVat += J1UniqueFunctors[aname.str()]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(),
+        auto gid = jg * NumTargetGroups + P.getGroupID(iat);
+          if (J1UniqueFunctors[gid])
+            curVat += J1UniqueFunctors[gid]->evaluateV(-1, Ions.first(jg), Ions.last(jg), dist.data(),
                                                              DistCompressed.data());
       }
     }
     else
     {
-      std::stringstream aname;
       for (int c = 0; c < Nions; ++c)
       {
-        aname.str() = "";
-        aname << Ions.getGroupID(c) << P.getGroupID(iat);
-        if (J1UniqueFunctors.find(aname.str()) == J1UniqueFunctors.end())
-        {
-          aname.str() = "";
-          aname << Ions.getGroupID(c);
-        }
-        if (J1UniqueFunctors[aname.str()] != nullptr)
-          curVat += J1UniqueFunctors[aname.str()]->evaluate(dist[c]);
+        auto gid = Ions.getGroupID(c) * NumTargetGroups + P.getGroupID(iat);
+        if (J1UniqueFunctors[gid])
+          curVat += J1UniqueFunctors[gid]->evaluate(dist[c]);
       }
     }
     return curVat;
@@ -404,16 +389,9 @@ struct J1Spin : public WaveFunctionComponent
       {
         for (int jg = 0; jg < NumTargetGroups; ++jg)
         {
-          std::stringstream gid;
-          gid << ig << jg;
-          if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
-          {
-            gid.str() = "";
-            gid << ig;
-          }
-
-          if (J1UniqueFunctors[gid.str()] != nullptr)
-            curAt += J1UniqueFunctors[gid.str()]->evaluateV(-1, Ions.first(ig), Ions.last(ig), dist.data(),
+          auto gid = ig * NumTargetGroups + jg;
+          if (J1UniqueFunctors[gid] != nullptr)
+            curAt += J1UniqueFunctors[gid]->evaluateV(-1, Ions.first(ig), Ions.last(ig), dist.data(),
                                                             DistCompressed.data());
         }
       }
@@ -424,15 +402,9 @@ struct J1Spin : public WaveFunctionComponent
       {
         for (int jg = 0; jg < NumTargetGroups; ++jg)
         {
-          std::stringstream gid;
-          gid << Ions.getGroupID(ig) << jg;
-          if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
-          {
-            gid.str() = "";
-            gid << Ions.getGroupID(ig);
-          }
-          if (J1UniqueFunctors[gid.str()] != nullptr)
-            curAt += J1UniqueFunctors[gid.str()]->evaluate(dist[ig]);
+          auto gid = Ions.getGroupID(ig) * NumTargetGroups + jg;
+          if (J1UniqueFunctors[gid] != nullptr)
+            curAt += J1UniqueFunctors[gid]->evaluate(dist[ig]);
         }
       }
     }
@@ -494,16 +466,9 @@ struct J1Spin : public WaveFunctionComponent
 
       for (int jg = 0; jg < NumGroups; ++jg)
       {
-        std::stringstream gid;
-        gid << jg << P.getGroupID(iat);
-        if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
-        {
-          gid.str() = "";
-          gid << jg;
-        }
-        if (J1UniqueFunctors[gid.str()] == nullptr)
-          continue;
-        J1UniqueFunctors[gid.str()]->evaluateVGL(-1, Ions.first(jg), Ions.last(jg), dist.data(), U.data(), dU.data(),
+        auto gid = NumTargetGroups * jg + P.getGroupID(iat);
+        if (J1UniqueFunctors[gid] )
+            J1UniqueFunctors[gid]->evaluateVGL(-1, Ions.first(jg), Ions.last(jg), dist.data(), U.data(), dU.data(),
                                                  d2U.data(), DistCompressed.data(), DistIndice.data());
       }
     }
@@ -511,16 +476,10 @@ struct J1Spin : public WaveFunctionComponent
     {
       for (int c = 0; c < Nions; ++c)
       {
-        std::stringstream gid;
-        gid << Ions.getGroupID(c) << P.getGroupID(iat);
-        if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
+        auto gid = Ions.getGroupID(c) * NumTargetGroups + P.getGroupID(iat);
+        if (J1UniqueFunctors[gid])
         {
-          gid.str() = "";
-          gid << Ions.getGroupID(c);
-        }
-        if (J1UniqueFunctors[gid.str()] != nullptr)
-        {
-          U[c] = J1UniqueFunctors[gid.str()]->evaluate(dist[c], dU[c], d2U[c]);
+          U[c] = J1UniqueFunctors[gid]->evaluate(dist[c], dU[c], d2U[c]);
           dU[c] /= dist[c];
         }
       }
@@ -610,8 +569,8 @@ struct J1Spin : public WaveFunctionComponent
       return;
     myVars = vars;
     dLogPsi.resize(NumVars);
-    gradLogPsi.resize(NumVars, 0);
-    lapLogPsi.resize(NumVars, 0);
+    //gradLogPsi.resize(NumVars, 0);
+    //lapLogPsi.resize(NumVars, 0);
     for (int i = 0; i < NumVars; ++i)
     {
       gradLogPsi[i] = new WavefunctionFirstDerivativeType(Nelec);
@@ -622,92 +581,39 @@ struct J1Spin : public WaveFunctionComponent
 
   std::unique_ptr<WaveFunctionComponent> makeClone(ParticleSet& tqp) const override
   {
-    auto j1copy         = std::make_unique<J1Spin<FT>>(myName, Ions, tqp);
-    j1copy->Optimizable = Optimizable;
-    if (NumGroups > 0)
-    {
-      for (int i = 0; i < NumGroups; i++)
-      {
-        std::stringstream gid;
-        gid << i;
-        auto pos = J1UniqueFunctors.find(gid.str());
-        if (pos != J1UniqueFunctors.end())
-        {
-          auto fc = std::make_unique<FT>(*pos->second.get());
-          j1copy->addFunc(i, std::move(fc));
-        }
-        for (int j = 0; j < NumTargetGroups; j++)
-        {
-          std::stringstream gid;
-          gid << i << j;
-          auto pos = J1UniqueFunctors.find(gid.str());
-          if (pos != J1UniqueFunctors.end())
-          {
-            auto fc = std::make_unique<FT>(*pos->second.get());
-            j1copy->addFunc(i, std::move(fc), j);
-          }
-        }
-      }
-    }
-    else
-    {
-      for (int i = 0; i < Nions; ++i)
-      {
-        std::stringstream gid;
-        gid << i;
-        auto pos = J1UniqueFunctors.find(gid.str());
-        if (pos != J1UniqueFunctors.end())
-        {
-          auto fc = std::make_unique<FT>(*pos->second.get());
-          j1copy->addFunc(i, std::move(fc));
-        }
-        for (int j = 0; j < NumTargetGroups; j++)
-        {
-          std::stringstream gid;
-          gid << i << j;
-          auto pos = J1UniqueFunctors.find(gid.str());
-          if (pos != J1UniqueFunctors.end())
-          {
-            auto fc = std::make_unique<FT>(*pos->second.get());
-            j1copy->addFunc(i, std::move(fc), j);
-          }
-        }
-      }
-    }
-    j1copy->setVars(myVars);
-    j1copy->OffSet = OffSet;
-    return j1copy;
+    auto cloned_J1Spin = std::make_unique<J1Spin<FT>>( *this, tqp);
+    return cloned_J1Spin;
   }
 
   /**@{ WaveFunctionComponent virtual functions that are not essential for the development */
   void reportStatus(std::ostream& os) override
   {
-    for (auto& J1UniqueFunctorsptrpair : J1UniqueFunctors)
-      if (J1UniqueFunctorsptrpair.second != nullptr)
-        J1UniqueFunctorsptrpair.second->myVars.print(os);
+    for (auto& J1UniqueFunctor : J1UniqueFunctors)
+      if (J1UniqueFunctor != nullptr)
+        J1UniqueFunctor->myVars.print(os);
   }
 
   void checkInVariables(opt_variables_type& active) override
   {
     myVars.clear();
-    for (auto& J1UniqueFunctorsptrpair : J1UniqueFunctors)
+    for (auto& J1UniqueFunctor : J1UniqueFunctors)
     {
-      if (J1UniqueFunctorsptrpair.second != nullptr)
+      if (J1UniqueFunctor != nullptr)
       {
-        J1UniqueFunctorsptrpair.second->checkInVariables(active);
-        J1UniqueFunctorsptrpair.second->checkInVariables(myVars);
+        J1UniqueFunctor->checkInVariables(active);
+        J1UniqueFunctor->checkInVariables(myVars);
       }
     }
   }
   void checkOutVariables(const opt_variables_type& active) override
   {
     myVars.clear();
-    for (auto& J1UniqueFunctorsptrpair : J1UniqueFunctors)
+    for (auto& J1UniqueFunctor : J1UniqueFunctors)
     {
-      if (J1UniqueFunctorsptrpair.second)
+      if (J1UniqueFunctor)
       {
-        J1UniqueFunctorsptrpair.second->myVars.getIndex(active);
-        myVars.insertFrom(J1UniqueFunctorsptrpair.second->myVars);
+        J1UniqueFunctor->myVars.getIndex(active);
+        myVars.insertFrom(J1UniqueFunctor->myVars);
       }
     }
     myVars.getIndex(active);
@@ -716,14 +622,14 @@ struct J1Spin : public WaveFunctionComponent
     if (NumVars && dLogPsi.size() == 0)
     {
       dLogPsi.resize(NumVars);
-      gradLogPsi.resize(NumVars, 0);
-      lapLogPsi.resize(NumVars, 0);
+      //gradLogPsi.resize(NumVars, 0);
+      //lapLogPsi.resize(NumVars, 0);
       for (int i = 0; i < NumVars; ++i)
       {
         gradLogPsi[i] = new WavefunctionFirstDerivativeType(Nelec);
         lapLogPsi[i]  = new WavefunctionSecondDerivativeType(Nelec);
       }
-      OffSet.resize(J1Functors.size());
+      OffSet.resize(J1UniqueFunctors.size());
       // Find first active variable for the starting offset
       int varoffset = -1;
       for (int i = 0; i < myVars.size(); i++)
@@ -733,12 +639,12 @@ struct J1Spin : public WaveFunctionComponent
           break;
       }
 
-      for (int i = 0; i < J1Functors.size(); ++i)
+      for (int i = 0; i < J1UniqueFunctors.size(); ++i)
       {
-        if (J1Functors[i] && J1Functors[i]->myVars.Index.size())
+        if (J1UniqueFunctors[i] && J1UniqueFunctors[i]->myVars.Index.size())
         {
-          OffSet[i].first  = J1Functors[i]->myVars.Index.front() - varoffset;
-          OffSet[i].second = J1Functors[i]->myVars.Index.size() + OffSet[i].first;
+          OffSet[i].first  = J1UniqueFunctors[i]->myVars.Index.front() - varoffset;
+          OffSet[i].second = J1UniqueFunctors[i]->myVars.Index.size() + OffSet[i].first;
         }
         else
         {
@@ -747,18 +653,18 @@ struct J1Spin : public WaveFunctionComponent
       }
     }
     Optimizable = myVars.is_optimizable();
-    for (auto& J1UniqueFunctorsptrpair : J1UniqueFunctors)
-      if (J1UniqueFunctorsptrpair.second != nullptr)
-        J1UniqueFunctorsptrpair.second->checkOutVariables(active);
+    for (auto& J1UniqueFunctor : J1UniqueFunctors)
+      if (J1UniqueFunctor != nullptr)
+        J1UniqueFunctor->checkOutVariables(active);
   }
 
   void resetParameters(const opt_variables_type& active) override
   {
     if (!Optimizable)
       return;
-    for (auto& J1UniqueFunctorsptrpair : J1UniqueFunctors)
-      if (J1UniqueFunctorsptrpair.second != nullptr)
-        J1UniqueFunctorsptrpair.second->resetParameters(active);
+    for (auto& J1UniqueFunctor : J1UniqueFunctors)
+      if (J1UniqueFunctor != nullptr)
+        J1UniqueFunctor->resetParameters(active);
 
     for (int i = 0; i < myVars.size(); ++i)
     {
@@ -780,17 +686,10 @@ struct J1Spin : public WaveFunctionComponent
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
-      std::stringstream gid;
-      gid << source.getGroupID(isrc) << P.getGroupID(iat);
-      if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
+      auto gid          = source.getGroupID(isrc) * NumTargetGroups + P.getGroupID(iat);
+      if (J1UniqueFunctors[gid] != nullptr)
       {
-        gid.str() = "";
-        gid << source.getGroupID(isrc);
-      }
-
-      if (J1UniqueFunctors[gid.str()] != nullptr)
-      {
-        U[isrc] = J1UniqueFunctors[gid.str()]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
+        U[isrc] = J1UniqueFunctors[gid]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
         g_return -= dU[isrc] * rinv * dr;
       }
     }
@@ -812,16 +711,9 @@ struct J1Spin : public WaveFunctionComponent
       RealType r        = dist[isrc];
       RealType rinv     = 1.0 / r;
       PosType dr        = displ[isrc];
-      std::stringstream gid;
-      gid << source.getGroupID(isrc) << P.getGroupID(iat);
-      if (J1UniqueFunctors.find(gid.str()) == J1UniqueFunctors.end())
-      {
-        gid.str() = "";
-        gid << source.getGroupID(isrc);
-      }
-
-      if (J1UniqueFunctors[gid.str()] != nullptr)
-        U[isrc] = J1UniqueFunctors[gid.str()]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
+      auto gid          = source.getGroupID(isrc) * NumTargetGroups + P.getGroupID(iat);
+      if (J1UniqueFunctors[gid] != nullptr)
+        U[isrc] = J1UniqueFunctors[gid]->evaluate(dist[isrc], dU[isrc], d2U[isrc], d3U[isrc]);
       else
         throw std::runtime_error("J1OrbitalSoa::evaluateGradSource:  J1UniqueFunctors[gid]==nullptr");
 
