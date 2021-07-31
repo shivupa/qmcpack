@@ -136,6 +136,7 @@ struct J1Spin : public WaveFunctionComponent
   /* initialize storage */
   void initialize(ParticleSet& els)
   {
+    J1UniqueFunctors.resize(NumGroups * NumTargetGroups);
     Vat.resize(Nelec);
     Grad.resize(Nelec);
     Lap.resize(Nelec);
@@ -569,12 +570,12 @@ struct J1Spin : public WaveFunctionComponent
       return;
     myVars = vars;
     dLogPsi.resize(NumVars);
-    //gradLogPsi.resize(NumVars, 0);
-    //lapLogPsi.resize(NumVars, 0);
+    gradLogPsi.resize(NumVars);
+    lapLogPsi.resize(NumVars);
     for (int i = 0; i < NumVars; ++i)
     {
-      gradLogPsi[i] = new WavefunctionFirstDerivativeType(Nelec);
-      lapLogPsi[i]  = new WavefunctionSecondDerivativeType(Nelec);
+      gradLogPsi[i].resize(Nelec);
+      lapLogPsi[i].resize(Nelec);
     }
   }
 
@@ -622,12 +623,12 @@ struct J1Spin : public WaveFunctionComponent
     if (NumVars && dLogPsi.size() == 0)
     {
       dLogPsi.resize(NumVars);
-      //gradLogPsi.resize(NumVars, 0);
-      //lapLogPsi.resize(NumVars, 0);
+      gradLogPsi.resize(NumVars);
+      lapLogPsi.resize(NumVars);
       for (int i = 0; i < NumVars; ++i)
       {
-        gradLogPsi[i] = new WavefunctionFirstDerivativeType(Nelec);
-        lapLogPsi[i]  = new WavefunctionSecondDerivativeType(Nelec);
+        gradLogPsi[i].resize(Nelec);
+        lapLogPsi[i].resize(Nelec);
       }
       OffSet.resize(J1UniqueFunctors.size());
       // Find first active variable for the starting offset
