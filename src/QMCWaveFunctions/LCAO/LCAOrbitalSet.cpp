@@ -102,6 +102,16 @@ void LCAOrbitalSet::evaluateValue(const ParticleSet& P, int iat, ValueVector& ps
   }
 }
 
+void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_list, RefVectorWithLeader<ParticleSet>& P, int iat, RefVector<ValueVector>& psi) const
+{
+	SPOSet::mw_evaluateValue(lcao_list, P, iat, psi);
+}
+
+/** Find a better place for other user classes, Matrix should be padded as well */
+template<typename T, unsigned D>
+inline void Product_ABt(const VectorSoaContainer<T, D>& A, const Matrix<T>& B, VectorSoaContainer<T, D>& C)
+{
+
 /** Find a better place for other user classes, Matrix should be padded as well */
 template<typename T, unsigned D>
 inline void Product_ABt(const VectorSoaContainer<T, D>& A, const Matrix<T>& B, VectorSoaContainer<T, D>& C)
