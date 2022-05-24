@@ -104,22 +104,31 @@ void LCAOrbitalSet::evaluateValue(const ParticleSet& P, int iat, ValueVector& ps
 
 void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_list, RefVectorWithLeader<ParticleSet>& P_list, int iat, RefVector<ValueVector>& psi_v_list) const
 {
+  //TODO 1: naive implementation to get basis evaluation in matrix form
+    // this will loop over walkers and place each walker evaluation into the matrix
+    // eveyrthing else will be removed outside of the loop.
+
   assert(this == &lcao_list.getLeader());
-#pragma omp parallel for
-  for (int iw = 0; iw < lcao_list.size(); iw++){
-    if (lcao_list[iw].Identity)
+  if (Identity)
     { //PAY ATTENTION TO COMPLEX
-      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].data());
+      #pragma omp parallel for
+      for (int iw = 0; iw < lcao_list.size(); iw++){
+        lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].data());
     }
     else
     {
-      Vector<ValueType> vTemp(lcao_list[iw].Temp.data(0), lcao_list[iw].BasisSetSize);
-      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
-      assert(psi_v_list[iw].size() <= lcao_list[iw].OrbitalSetSize);
-      ValueMatrix C_partial_view(lcao_list[iw].C->data(), psi_v_list[iw].size(), lcao_list[iw].BasisSetSize);
-      simd::gemv(C_partial_view, vTemp.data(), psi_v_list[iw].data());
-    }
+      // Matrix to perform gemm on that is of size N_{walker} x N_{MO}
+      ValueMatrix VtempMatrix(psi_v_list[0].size(), lcao_list.size());
+      #pragma omp parallel for
+      for (int iw = 0; iw < lcao_list.size(); iw++){
+        Vector<ValueType> vTemp(lcao_list[iw].Temp.data(0), lcao_list[iw].BasisSetSize);
+        lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
+      }
+    // assert(psi_v_list[iw].size() <= lcao_list[iw].OrbitalSetSize);
+    ValueMatrix C_partial_view(lcao_list[iw].C->data(), psi_v_list[iw].size(), lcao_list[iw].BasisSetSize);
+    simd::gemm(C_partial_view, vTemp.data(), psi_v_list[iw].data());
   }
+
 }
 
 /** Find a better place for other user classes, Matrix should be padded as well */
