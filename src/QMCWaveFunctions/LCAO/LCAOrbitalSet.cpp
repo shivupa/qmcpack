@@ -102,12 +102,24 @@ void LCAOrbitalSet::evaluateValue(const ParticleSet& P, int iat, ValueVector& ps
   }
 }
 
-void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_list, RefVectorWithLeader<ParticleSet>& P, int iat, RefVector<ValueVector>& psi) const
+void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_list, RefVectorWithLeader<ParticleSet>& P_list, int iat, RefVector<ValueVector>& psi_v_list) const
 {
   assert(this == &lcao_list.getLeader());
 #pragma omp parallel for
-  for (int iw = 0; iw < spo_list.size(); iw++)
-    lcao_list[iw].evaluateValue(P_list[iw], iat, psi_v_list[iw]);
+  for (int iw = 0; iw < lcao_list.size(); iw++){
+    if (lcao_list[iw].Identity)
+    { //PAY ATTENTION TO COMPLEX
+      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].data());
+    }
+    else
+    {
+      Vector<ValueType> vTemp(lcao_list[iw].Temp.data(0), lcao_list[iw].BasisSetSize);
+      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
+      assert(psi_v_list[iw].size() <= lcao_list[iw].OrbitalSetSize);
+      ValueMatrix C_partial_view(lcao_list[iw].C->data(), psi_v_list[iw].size(), lcao_list[iw].BasisSetSize);
+      simd::gemv(C_partial_view, vTemp.data(), psi_v_list[iw].data());
+    }
+  }
 }
 
 /** Find a better place for other user classes, Matrix should be padded as well */
