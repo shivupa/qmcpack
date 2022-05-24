@@ -104,7 +104,10 @@ void LCAOrbitalSet::evaluateValue(const ParticleSet& P, int iat, ValueVector& ps
 
 void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_list, RefVectorWithLeader<ParticleSet>& P, int iat, RefVector<ValueVector>& psi) const
 {
-	SPOSet::mw_evaluateValue(lcao_list, P, iat, psi);
+  assert(this == &lcao_list.getLeader());
+#pragma omp parallel for
+  for (int iw = 0; iw < spo_list.size(); iw++)
+    lcao_list[iw].evaluateValue(P_list[iw], iat, psi_v_list[iw]);
 }
 
 /** Find a better place for other user classes, Matrix should be padded as well */
