@@ -110,25 +110,35 @@ void LCAOrbitalSet::mw_evaluateValue(RefVectorWithLeader<LCAOrbitalSet>& lcao_li
 
   assert(this == &lcao_list.getLeader());
   if (Identity)
-    { //PAY ATTENTION TO COMPLEX
-      #pragma omp parallel for
-      for (int iw = 0; iw < lcao_list.size(); iw++){
-        lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].data());
+  { //PAY ATTENTION TO COMPLEX
+    #pragma omp parallel for
+    for (int iw = 0; iw < lcao_list.size(); iw++){
+      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].data());
+  }
+  else
+  {
+    // Matrix to perform gemm on that is of size N_{AO} x N_{walker}
+    ValueMatrix VtempMatrix(BasisSetSize, lcao_list.size());
+    #pragma omp parallel for
+    for (int iw = 0; iw < lcao_list.size(); iw++){
+      Vector<ValueType> vTemp(lcao_list[iw].Temp.data(0), lcao_list[iw].BasisSetSize);
+      lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
+      VtempMatrix.replaceColumn(vTemp.start(), iw);
     }
-    else
-    {
-      // Matrix to perform gemm on that is of size N_{walker} x N_{MO}
-      ValueMatrix VtempMatrix(psi_v_list[0].size(), lcao_list.size());
-      #pragma omp parallel for
-      for (int iw = 0; iw < lcao_list.size(); iw++){
-        Vector<ValueType> vTemp(lcao_list[iw].Temp.data(0), lcao_list[iw].BasisSetSize);
-        lcao_list[iw].myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
-      }
     // assert(psi_v_list[iw].size() <= lcao_list[iw].OrbitalSetSize);
     ValueMatrix C_partial_view(lcao_list[iw].C->data(), psi_v_list[iw].size(), lcao_list[iw].BasisSetSize);
-    simd::gemm(C_partial_view, vTemp.data(), psi_v_list[iw].data());
+    // Gemm result Matrix that is of size N_{MO} x N_{walker}
+    ValueMatrix ResultMatrix(psi_v_list[iw].size(), lcao_list.size());
+    // TODO change to some sort of offloaded gemm
+    simd::gemm(C_partial_view, vTempMatrix.data(), ResultMatrix.data());
+    // TODO change so we dont have to transpose here
+    #pragma omp parallel for
+    for (int iw = 0; iw < lcao_list.size(); iw++){
+      for (int imo = 0; imo < psi_v_list[iw].size(); imo++){
+        psi_v_list[iw][imo] = ResultMatrix(imo, iw);
+      }
+    }
   }
-
 }
 
 /** Find a better place for other user classes, Matrix should be padded as well */
