@@ -72,7 +72,7 @@ public:
   void mw_evaluateValue(const RefVectorWithLeader<SPOSet>& spo_list,
                         const RefVectorWithLeader<ParticleSet>& P_list,
                         int iat,
-                        const RefVector<ValueVector>& psi_v_list) const override;
+                        ValueMatrix& psi_v_mat) const override;
 
   void evaluateVGL(const ParticleSet& P, int iat, ValueVector& psi, GradVector& dpsi, ValueVector& d2psi) override;
 

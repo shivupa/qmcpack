@@ -105,7 +105,7 @@ void LCAOrbitalSet::evaluateValue(const ParticleSet& P, int iat, ValueVector& ps
 void LCAOrbitalSet::mw_evaluateValue(const RefVectorWithLeader<SPOSet>& spo_list,
                                      const RefVectorWithLeader<ParticleSet>& P_list,
                                      int iat,
-                                     const RefVector<ValueVector>& psi_v_list) const
+                                     ValueMatrix& psi_v_mat) const
 {
   //TODO 1: naive implementation to get basis evaluation in matrix form
   // this will loop over walkers and place each walker evaluation into the matrix
@@ -117,26 +117,39 @@ void LCAOrbitalSet::mw_evaluateValue(const RefVectorWithLeader<SPOSet>& spo_list
 #pragma omp parallel for
     for (int iw = 0; iw < spo_list.size(); iw++)
     {
-      myBasisSet->evaluateV(P_list[iw], iat, psi_v_list[iw].get().data());
+      Vector<ValueType> vTemp(Temp.data(0), BasisSetSize);
+      // previous stored as N_{walker} x N_{MO}
+      // change to N_{MO} x N{walker}
+      for (auto int imo = 0; imo < psi_v_mat.rows(); imo++)
+      {
+        vTemp[imo] = psi_v_mat(imo, iw);
+      }
+      myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
+      psi_v_mat.replaceRow(vTemp.start(), iw);
     }
   }
   else
   {
+    // BasisSetSize = N_{AO}
+    // spo_list.size() = N_{walker}
+    // psi_v_mat.rows() = N_{MO}
     // Matrix to perform gemm on that is of size N_{AO} x N_{walker}
-    ValueMatrix VtempMatrix(BasisSetSize, spo_list.size());
 #pragma omp parallel for
     for (int iw = 0; iw < spo_list.size(); iw++)
     {
       Vector<ValueType> vTemp(Temp.data(0), BasisSetSize);
       myBasisSet->evaluateV(P_list[iw], iat, vTemp.data());
-      VtempMatrix.replaceColumn(vTemp.start(), iw);
+      psi_v_mat.replaceRow(vTemp.start(), iw);
     }
     // assert(psi_v_list[iw].size() <= spo_list[iw].OrbitalSetSize);
+    // N_{MO} x N_{AO}
     ValueMatrix C_partial_view(spo_list[iw].C->data(), psi_v_list[iw].size(), BasisSetSize);
     // Gemm result Matrix that is of size N_{MO} x N_{walker}
-    ValueMatrix ResultMatrix(psi_v_list[iw].size(), spo_list.size());
+    //ValueMatrix ResultMatrix(psi_v_list[iw].size(), spo_list.size());
     // TODO change to some sort of offloaded gemm
-    simd::gemm(C_partial_view, vTempMatrix.data(), ResultMatrix.data());
+    // C(N_{MO} x N_{AO}) @ psi_v_mat(N_{AO} x N_{walker})  = ResultMatrix (N_{MO} x N_{walker})
+    ValueMatrix ao_values(psi_v_mat);
+    simd::gemm(C_partial_view, ao_values.data(), psi_v_mat.data());
 // TODO change so we dont have to transpose here
 #pragma omp parallel for
     for (int iw = 0; iw < spo_list.size(); iw++)
