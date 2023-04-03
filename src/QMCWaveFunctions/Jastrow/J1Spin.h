@@ -548,7 +548,6 @@ struct J1Spin : public WaveFunctionComponent
     }
     myVars.getIndex(active);
     const size_t NumVars = myVars.size();
-    myVars.print(std::cout);
     if (NumVars)
     {
       OffSet.resize(J1UniqueFunctors.size());

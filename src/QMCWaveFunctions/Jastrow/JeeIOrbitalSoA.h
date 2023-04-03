@@ -334,6 +334,7 @@ public:
 
     myVars.getIndex(active);
     const size_t NumVars = myVars.size();
+    myVars.print(std::cout);
     if (NumVars)
     {
       VarOffset.resize(iGroups, eGroups, eGroups);
