@@ -183,16 +183,16 @@ public:
   std::unique_ptr<TraceManager> Traces;
 
   ///return the random generators
-  inline RefVector<RandomGenerator> getRngRefs() const
+  inline RefVector<RandomBase<double>> getRngRefs() const
   {
-    RefVector<RandomGenerator> RngRefs;
+    RefVector<RandomBase<double>> RngRefs;
     for (int i = 0; i < Rng.size(); ++i)
       RngRefs.push_back(*Rng[i]);
     return RngRefs;
   }
 
   ///return the i-th random generator
-  inline RandomGenerator& getRng(int i) override { return (*Rng[i]); }
+  inline RandomBase<double>& getRng(int i) override { return (*Rng[i]); }
 
   unsigned long getDriverMode() override { return qmc_driver_mode.to_ulong(); }
 
@@ -229,7 +229,6 @@ protected:
   *
   * The unit is in steps.
   */
-  int storeConfigs;
 
   ///Period to recalculate the walker properties from scratch.
   int Period4CheckProperties;
@@ -324,7 +323,7 @@ protected:
   std::vector<QMCHamiltonian*> H1;
 
   ///Random number generators
-  UPtrVector<RandomGenerator> Rng;
+  UPtrVector<RandomBase<double>> Rng;
 
   ///a list of mcwalkerset element
   std::vector<xmlNodePtr> mcwalkerNodePtr;
