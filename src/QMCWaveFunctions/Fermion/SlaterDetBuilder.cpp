@@ -1152,7 +1152,7 @@ bool SlaterDetBuilder::readDetListH5(xmlNodePtr cur,
   std::vector<ci_configuration> dummyCs(nGroups);
   for (int grp = 0; grp < nGroups; grp++)
   {
-    MyCIs[grp].resize(nstates);
+    MyCIs[grp].resize(nstates, '0');
     dummyCs[grp].occup.resize(nstates, false);
     for (size_t i = 0; i < nstates; i++)
       dummyCs[grp].occup[i] = true;
