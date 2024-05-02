@@ -165,6 +165,10 @@ elseif(ENABLE_SYCL)
   target_link_libraries(qmcwfs PRIVATE qmcwfs_sycl)
 endif()
 
+if(QMC_AD)
+  target_link_libraries(qmcwfs PRIVATE LLDEnzymeFlags)
+endif()
+
 if(BUILD_UNIT_TESTS)
   add_subdirectory(tests)
 endif()

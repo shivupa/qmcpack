@@ -52,6 +52,7 @@ endif()
 # MPI, OpenMP, GPU acceleration
 #--------------------------------------------------------------------
 include(CMakeDependentOption)
+option(QMC_AD "Enable/disable AD" ON)
 option(QMC_MPI "Enable/disable MPI" ON)
 option(QMC_OMP "Enable/disable OpenMP" ON)
 option(QMC_COMPLEX "Build for complex binary" OFF)
@@ -107,6 +108,13 @@ endif()
 include(DetermineDeviceArchitectures)
 message(STATUS "GPU device architectures: ${QMC_GPU_ARCHS}")
 
+if (QMC_AD)
+    find_package(Enzyme REQUIRED CONFIG)
+    message(STATUS "QMC_AD found dir ${Enzyme_DIR}")
+    message(STATUS "QMC_AD found ${Enzyme_FOUND}")
+    get_property(importTargetsAfter DIRECTORY "${CMAKE_SOURCE_DIR}" PROPERTY IMPORTED_TARGETS)
+    message(STATUS "QMC_AD imported targets ${importTargetsAfter}")
+endif()
 #--------------------------------------------------------------------
 # Set compiler-time parameters
 # WALKER_MAX_PROPERTIES max number of observables + 12 or so standard
