@@ -674,17 +674,15 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
   }
 
+  inline real_type evaluate_dudr(real_type r) { return __enzyme_autodiff((void*)evaluate, r); }
+
+  inline real_type evaluate_d2udr2(real_type r) { return __enzyme_autodiff((void*)evaluate_dudr, r); }
+
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2)
   {
-    real_type ar(A * r);
-    real_type br(B * r);
-    real_type cr(C * r);
-    real_type dr(D * r);
-    real_type bttm(1.0 / (1.0 + C * cr + dr * dr));
-    dudr   = (A - A * dr * dr + br * (2.0 + C * cr)) * bttm * bttm;
-    d2udr2 = -2.0 * (A * (C * C + 3.0 * dr * D - dr * dr * dr * D) + B * (-1.0 + dr * dr * (3.0 + C * cr))) * bttm *
-        bttm * bttm;
-    return (A * r + br * r) * bttm;
+    dudr   = evaluate_dudr(r);
+    d2udr2 = evaluate_d2udr2(r);
+    return evaluate(r);
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2, real_type& d3udr3)
