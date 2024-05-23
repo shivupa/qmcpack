@@ -30,6 +30,40 @@
 
 namespace qmcplusplus
 {
+
+namespace qmcad{
+  int enzyme_dup;
+  int enzyme_dupnoneed;
+  int enzyme_out;
+  int enzyme_const;
+
+  template<typename RT, typename... Args>
+  RT __enzyme_autodiff(void*, Args...);
+
+
+  using real_type = optimize::VariableSet::real_type;
+  real_type PadeTwo2ndOrderFunctor_evaluate(real_type r, real_type A, real_type B, real_type C, real_type D){
+    real_type br(B * r);
+    real_type dr(D * r);
+    return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
+  }
+  
+  real_type evaluate_dudr(real_type r, real_type A, real_type B, real_type C, real_type D){
+    return __enzyme_autodiff<real_type>((void*)PadeTwo2ndOrderFunctor_evaluate, r, 
+        enzyme_const, A,
+        enzyme_const, B,
+        enzyme_const, C,
+        enzyme_const, D ); }
+
+  real_type evaluate_d2udr2(real_type r, real_type A, real_type B, real_type C, real_type D){
+  
+   return __enzyme_autodiff<real_type>((void*)evaluate_dudr, r,
+    enzyme_const, A,
+    enzyme_const, B,
+    enzyme_const, C,
+    enzyme_const, D);
+  }
+  }
 /** Implements a Pade Function \f$u[r]=A*r/(1+B*r)\f$
  *
  * Similar to PadeJastrow with a scale.
@@ -669,14 +703,12 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
 
   inline real_type evaluate(real_type r)
   {
-    real_type br(B * r);
-    real_type dr(D * r);
-    return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
+    return qmcad::PadeTwo2ndOrderFunctor_evaluate(r, A, B, C, D);
   }
 
-  inline real_type evaluate_dudr(real_type r) { return __enzyme_autodiff((void*)evaluate, r); }
+  inline real_type evaluate_dudr(real_type r) { return qmcad::evaluate_dudr(r, A, B, C, D);}
 
-  inline real_type evaluate_d2udr2(real_type r) { return __enzyme_autodiff((void*)evaluate_dudr, r); }
+  inline real_type evaluate_d2udr2(real_type r) { return qmcad::evaluate_d2udr2(r, A, B, C, D);}
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2)
   {
@@ -1026,5 +1058,6 @@ struct ScaledPadeFunctor : public OptimizableFunctorBase
     B2       = 2.0 * B;
   }
 };
+
 } // namespace qmcplusplus
 #endif
