@@ -32,32 +32,53 @@ namespace qmcplusplus
 {
 
 namespace qmcad{
-  int enzyme_dup;
-  int enzyme_dupnoneed;
-  int enzyme_out;
-  int enzyme_const;
+  inline int enzyme_dup;
+  inline int enzyme_dupnoneed;
+  inline int enzyme_out;
+  inline int enzyme_const;
 
   template<typename RT, typename... Args>
   RT __enzyme_autodiff(void*, Args...);
 
 
   using real_type = optimize::VariableSet::real_type;
-  real_type PadeTwo2ndOrderFunctor_evaluate(real_type r, real_type A, real_type B, real_type C, real_type D){
+
+  inline real_type Pade2ndOrderFunctor_evaluate(real_type r, real_type A, real_type B, real_type C){
+    real_type u = 1.0 / (1.0 + B * r);
+    real_type v = A * r + C * r * r;
+    return u * v;
+  }
+  
+  inline real_type Pade2ndOrderFunctor_evaluate_dudr(real_type r, real_type A, real_type B, real_type C){
+    return __enzyme_autodiff<real_type>((void*)Pade2ndOrderFunctor_evaluate, r, 
+        enzyme_const, A,
+        enzyme_const, B,
+        enzyme_const, C        ); }
+
+  inline real_type Pade2ndOrderFunctor_evaluate_d2udr2(real_type r, real_type A, real_type B, real_type C ){
+  
+   return __enzyme_autodiff<real_type>((void*)Pade2ndOrderFunctor_evaluate_dudr, r,
+    enzyme_const, A,
+    enzyme_const, B,
+    enzyme_const, C);
+  }
+
+  inline real_type PadeTwo2ndOrderFunctor_evaluate(real_type r, real_type A, real_type B, real_type C, real_type D){
     real_type br(B * r);
     real_type dr(D * r);
     return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
   }
   
-  real_type evaluate_dudr(real_type r, real_type A, real_type B, real_type C, real_type D){
+  inline real_type PadeTwo2ndOrderFunctor_evaluate_dudr(real_type r, real_type A, real_type B, real_type C, real_type D){
     return __enzyme_autodiff<real_type>((void*)PadeTwo2ndOrderFunctor_evaluate, r, 
         enzyme_const, A,
         enzyme_const, B,
         enzyme_const, C,
         enzyme_const, D ); }
 
-  real_type evaluate_d2udr2(real_type r, real_type A, real_type B, real_type C, real_type D){
+  inline real_type PadeTwo2ndOrderFunctor_evaluate_d2udr2(real_type r, real_type A, real_type B, real_type C, real_type D){
   
-   return __enzyme_autodiff<real_type>((void*)evaluate_dudr, r,
+   return __enzyme_autodiff<real_type>((void*)PadeTwo2ndOrderFunctor_evaluate_dudr, r,
     enzyme_const, A,
     enzyme_const, B,
     enzyme_const, C,
@@ -392,9 +413,7 @@ struct Pade2ndOrderFunctor : public OptimizableFunctorBase
     */
   inline real_type evaluate(real_type r) const
   {
-    real_type u = 1.0 / (1.0 + B * r);
-    real_type v = A * r + C * r * r;
-    return u * v;
+    return qmcad::Pade2ndOrderFunctor_evaluate(r, A, B, C);
   }
 
   /** evaluate the value at r
@@ -405,12 +424,9 @@ struct Pade2ndOrderFunctor : public OptimizableFunctorBase
    */
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2) const
   {
-    real_type u = 1.0 / (1.0 + B * r);
-    real_type v = A * r + C * r * r;
-    real_type w = A + C2 * r;
-    dudr        = u * (w - B * u * v);
-    d2udr2      = 2.0 * u * u * u * (C - B * A);
-    return u * v;
+    dudr        = qmcad::Pade2ndOrderFunctor_evaluate_dudr(r, A, B, C);
+    d2udr2      = qmcad::Pade2ndOrderFunctor_evaluate_d2udr2(r, A, B, C);
+    return qmcad::Pade2ndOrderFunctor_evaluate(r, A, B, C);
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2, real_type& d3udr3) const
@@ -706,9 +722,9 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     return qmcad::PadeTwo2ndOrderFunctor_evaluate(r, A, B, C, D);
   }
 
-  inline real_type evaluate_dudr(real_type r) { return qmcad::evaluate_dudr(r, A, B, C, D);}
+  inline real_type evaluate_dudr(real_type r) { return qmcad::PadeTwo2ndOrderFunctor_evaluate_dudr(r, A, B, C, D);}
 
-  inline real_type evaluate_d2udr2(real_type r) { return qmcad::evaluate_d2udr2(r, A, B, C, D);}
+  inline real_type evaluate_d2udr2(real_type r) { return qmcad::PadeTwo2ndOrderFunctor_evaluate_d2udr2(r, A, B, C, D);}
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2)
   {
