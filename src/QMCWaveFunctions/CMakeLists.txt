@@ -166,7 +166,8 @@ elseif(ENABLE_SYCL)
 endif()
 
 if(QMC_AD)
-  target_link_libraries(qmcwfs PRIVATE LLDEnzymeFlags)
+  target_link_libraries(qmcwfs INTERFACE Eigen3::Eigen)
+  target_link_libraries(qmcwfs INTERFACE autodiff::autodiff)
 endif()
 
 if(BUILD_UNIT_TESTS)
