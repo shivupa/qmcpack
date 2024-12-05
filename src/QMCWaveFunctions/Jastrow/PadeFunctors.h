@@ -27,6 +27,9 @@
 #include "OhmmsPETE/TinyVector.h"
 #include "OMPTarget/OffloadAlignedAllocators.hpp"
 
+#include <eigen3/Eigen/Core>
+#include <autodiff/reverse/var.hpp>
+#include <autodiff/reverse/var/eigen.hpp>
 
 namespace qmcplusplus
 {
@@ -96,7 +99,6 @@ namespace qmcad{
     using ad_real_type = var;
     using real_type    = optimize::VariableSet::real_type;
 
-    template<typename T>
     inline ad_real_type functor_evaluate_wrapper(ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
@@ -109,22 +111,20 @@ namespace qmcad{
     return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
     }
 
-    template<typename T>
-    inline void functor_dudr_wrapper( ad_real_type r, 
+    inline ad_real_type functor_dudr_wrapper( ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
                                                  ad_real_type C,
                                                  ad_real_type D,
                                                  ad_real_type& out_du_dr
                                                  ) {
-      u            = functor_evaluate_wrapper(r,A,B,C,D);
+      ad_real_type u            = functor_evaluate_wrapper(r,A,B,C,D);
       auto [du_dr] = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
       out_du_dr    = du_dr;
-    return out_du_dr;
+      return u;
     }
 
-    template<typename T>
-    inline void functor_d2udr2_wrapper( ad_real_type r, 
+    inline ad_real_type functor_d2udr2_wrapper( ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
                                                  ad_real_type C,
@@ -132,11 +132,12 @@ namespace qmcad{
                                                  ad_real_type& out_du_dr,
                                                  ad_real_type& out_d2u_dr2
                                                  ) {
-      u            = functor_evaluate_wrapper(r,A,B,C,D);
+      ad_real_type u            = functor_evaluate_wrapper(r,A,B,C,D);
       auto [du_dr]   = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
       auto [d2u_dr2] = derivativesx(du_dr, wrt(r));
       out_du_dr      = du_dr;
       out_d2u_dr2    = d2u_dr2;
+      return u;
     }
 }
 
@@ -475,9 +476,9 @@ struct Pade2ndOrderFunctor : public OptimizableFunctorBase
    */
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2) const
   {
-    dudr   = qmcad::functor_dudr_wrapper<Pade2ndOrderFunctor>(*this, r);
-    d2udr2   = qmcad::functor_d2udr2_wrapper<Pade2ndOrderFunctor>(*this, r);
-    return evaluate(r);
+    //dudr   = qmcad::functor_dudr_wrapper<Pade2ndOrderFunctor>(*this, r);
+    //d2udr2   = qmcad::functor_d2udr2_wrapper<Pade2ndOrderFunctor>(*this, r);
+    return 0.0; //evaluate(r);
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2, real_type& d3udr3) const
@@ -783,8 +784,8 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_D(D);
     ad_real_type ad_r(r);
 
-    ad_u = qmcad::functor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D);
-    real_type u = val(ad_u);
+    ad_real_type ad_u = qmcad::functor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D);
+    real_type u = real_type(ad_u);
     return u;
   }
 
@@ -800,7 +801,7 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_D(D);
     ad_real_type ad_r(r);
     ad_real_type ad_du_dr(0.0);
-    ad_real_type ad_u = qmcad::functor_dudr_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr);
+    ad_real_type ad_u =     qmcad::functor_dudr_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr);
     real_type du_dr = real_type(ad_du_dr);
     return du_dr;
 
@@ -842,10 +843,11 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_C(C);
     ad_real_type ad_D(D);
     ad_real_type ad_r(r);
+    ad_real_type ad_u(0.0);
     ad_real_type ad_du_dr(0.0);
     ad_real_type ad_d2u_dr2(0.0);
-    ad_real_type ad_u = qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr, ad_d2u_dr2);
-    real_type u = real_type(ad_u)
+    qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr, ad_d2u_dr2);
+    real_type u = real_type(ad_u);
     dudr = real_type(ad_du_dr);
     d2udr2 = real_type(ad_d2u_dr2);
     return u;
