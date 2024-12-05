@@ -99,7 +99,47 @@ namespace qmcad{
     using ad_real_type = var;
     using real_type    = optimize::VariableSet::real_type;
 
-    inline ad_real_type functor_evaluate_wrapper(ad_real_type r, 
+
+    inline ad_real_type Pade2ndOrderFunctor_evaluate_wrapper(ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C
+                                                 ) {
+      ad_real_type u = 1.0 / (1.0 + B * r);
+      ad_real_type v = A * r + C * r * r;
+      return u * v;
+    }
+
+    inline ad_real_type Pade2ndOrderFunctor_dudr_wrapper( ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C,
+                                                 ad_real_type& out_du_dr
+                                                 ) {
+      ad_real_type u            = Pade2ndOrderFunctor_evaluate_wrapper(r,A,B,C);
+      auto [du_dr] = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
+      out_du_dr    = du_dr;
+      return u;
+    }
+
+    inline ad_real_type Pade2ndOrderFunctor_d2udr2_wrapper( ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C,
+                                                 ad_real_type& out_du_dr,
+                                                 ad_real_type& out_d2u_dr2
+                                                 ) {
+      std::cout << " DOING AUTODIFF SHIV " << std::endl;
+      ad_real_type u            = Pade2ndOrderFunctor_evaluate_wrapper(r,A,B,C);
+      auto [du_dr]   = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
+      auto [d2u_dr2] = derivativesx(du_dr, wrt(r));
+      out_du_dr      = du_dr;
+      out_d2u_dr2    = d2u_dr2;
+      return u;
+    }
+
+
+    inline ad_real_type PadeTwo2ndOrderFunctor_evaluate_wrapper(ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
                                                  ad_real_type C,
@@ -111,20 +151,20 @@ namespace qmcad{
     return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
     }
 
-    inline ad_real_type functor_dudr_wrapper( ad_real_type r, 
+    inline ad_real_type PadeTwo2ndOrderFunctor_dudr_wrapper( ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
                                                  ad_real_type C,
                                                  ad_real_type D,
                                                  ad_real_type& out_du_dr
                                                  ) {
-      ad_real_type u            = functor_evaluate_wrapper(r,A,B,C,D);
+      ad_real_type u            = PadeTwo2ndOrderFunctor_evaluate_wrapper(r,A,B,C,D);
       auto [du_dr] = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
       out_du_dr    = du_dr;
       return u;
     }
 
-    inline ad_real_type functor_d2udr2_wrapper( ad_real_type r, 
+    inline ad_real_type PadeTwo2ndOrderFunctor_d2udr2_wrapper( ad_real_type r, 
                                                  ad_real_type A,
                                                  ad_real_type B,
                                                  ad_real_type C,
@@ -132,7 +172,7 @@ namespace qmcad{
                                                  ad_real_type& out_du_dr,
                                                  ad_real_type& out_d2u_dr2
                                                  ) {
-      ad_real_type u            = functor_evaluate_wrapper(r,A,B,C,D);
+      ad_real_type u            = PadeTwo2ndOrderFunctor_evaluate_wrapper(r,A,B,C,D);
       auto [du_dr]   = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
       auto [d2u_dr2] = derivativesx(du_dr, wrt(r));
       out_du_dr      = du_dr;
@@ -463,9 +503,22 @@ struct Pade2ndOrderFunctor : public OptimizableFunctorBase
     @return \f$ u(r) = \frac{a*r+c*r^2}{1+b*r} \f$
     */
   inline real_type evaluate(real_type r) const { 
-      real_type u = 1.0 / (1.0 + B * r);
-      real_type v = A * r + C * r * r;
-      return u * v;
+    //   real_type u = 1.0 / (1.0 + B * r);
+    //   real_type v = A * r + C * r * r;
+    //   return u * v;
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_r(r);
+
+    ad_real_type ad_u = qmcad::Pade2ndOrderFunctor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C);
+    real_type u = real_type(ad_u);
+    return u;
+
   }
 
   /** evaluate the value at r
@@ -478,18 +531,52 @@ struct Pade2ndOrderFunctor : public OptimizableFunctorBase
   {
     //dudr   = qmcad::functor_dudr_wrapper<Pade2ndOrderFunctor>(*this, r);
     //d2udr2   = qmcad::functor_d2udr2_wrapper<Pade2ndOrderFunctor>(*this, r);
-    return 0.0; //evaluate(r);
+    // return 0.0; //evaluate(r);
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_r(r);
+    ad_real_type ad_du_dr(0.0);
+    ad_real_type ad_d2u_dr2(0.0);
+
+    ad_real_type ad_u = qmcad::Pade2ndOrderFunctor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_du_dr, ad_d2u_dr2);
+    real_type u = real_type(u);
+    dudr = real_type(ad_du_dr);
+    d2udr2 = real_type(ad_d2u_dr2);
+    return u;
+
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2, real_type& d3udr3) const
   {
-    real_type u = 1.0 / (1.0 + B * r);
-    real_type v = A * r + C * r * r;
-    real_type w = A + C2 * r;
-    dudr        = u * (w - B * u * v);
-    d2udr2      = 2.0 * u * u * u * (C - B * A);
-    std::cerr << "Third derivative not imlemented for Pade functor.\n";
-    return u * v;
+    //real_type u = 1.0 / (1.0 + B * r);
+    //real_type v = A * r + C * r * r;
+    //real_type w = A + C2 * r;
+    //dudr        = u * (w - B * u * v);
+    //d2udr2      = 2.0 * u * u * u * (C - B * A);
+    //std::cerr << "Third derivative not imlemented for Pade functor.\n";
+    //return u * v;
+
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_r(r);
+    ad_real_type ad_du_dr(0.0);
+    ad_real_type ad_d2u_dr2(0.0);
+    ad_real_type ad_u = qmcad::Pade2ndOrderFunctor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_du_dr, ad_d2u_dr2);
+    real_type u = real_type(u);
+    real_type du_dr = real_type(ad_du_dr);
+    real_type d2u_dr2 = real_type(ad_d2u_dr2);
+    return u;
+
   }
 
   inline real_type evaluateV(const int iat,
@@ -784,7 +871,7 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_D(D);
     ad_real_type ad_r(r);
 
-    ad_real_type ad_u = qmcad::functor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D);
+    ad_real_type ad_u = qmcad::PadeTwo2ndOrderFunctor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D);
     real_type u = real_type(ad_u);
     return u;
   }
@@ -801,7 +888,7 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_D(D);
     ad_real_type ad_r(r);
     ad_real_type ad_du_dr(0.0);
-    ad_real_type ad_u =     qmcad::functor_dudr_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr);
+    ad_real_type ad_u =     qmcad::PadeTwo2ndOrderFunctor_dudr_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr);
     real_type du_dr = real_type(ad_du_dr);
     return du_dr;
 
@@ -820,7 +907,7 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_r(r);
     ad_real_type ad_du_dr(0.0);
     ad_real_type ad_d2u_dr2(0.0);
-    ad_real_type ad_u = qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr, ad_d2u_dr2);
+    ad_real_type ad_u = qmcad::PadeTwo2ndOrderFunctor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr, ad_d2u_dr2);
     real_type du_dr = real_type(ad_du_dr);
     real_type d2u_dr2 = real_type(ad_d2u_dr2);
     return d2u_dr2;
@@ -846,7 +933,7 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
     ad_real_type ad_u(0.0);
     ad_real_type ad_du_dr(0.0);
     ad_real_type ad_d2u_dr2(0.0);
-    qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr, ad_d2u_dr2);
+    qmcad::PadeTwo2ndOrderFunctor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D, ad_du_dr, ad_d2u_dr2);
     real_type u = real_type(ad_u);
     dudr = real_type(ad_du_dr);
     d2udr2 = real_type(ad_d2u_dr2);
