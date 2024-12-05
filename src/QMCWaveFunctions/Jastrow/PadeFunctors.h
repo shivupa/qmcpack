@@ -83,29 +83,60 @@ namespace qmcplusplus
 //}
 //} // namespace qmcad
 namespace qmcad{
-    inline int enzyme_dup;
-    inline int enzyme_dupnoneed;
-    inline int enzyme_out;
-    inline int enzyme_const;
+    // inline int enzyme_dup;
+    // inline int enzyme_dupnoneed;
+    // inline int enzyme_out;
+    // inline int enzyme_const;
 
-    template<typename RT, typename... Args>
-    RT __enzyme_autodiff(void*, Args...);
+    //template<typename RT, typename... Args>
+    //RT __enzyme_autodiff(void*, Args...);
 
-    using real_type = optimize::VariableSet::real_type;
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+    using real_type    = optimize::VariableSet::real_type;
 
     template<typename T>
-    inline real_type functor_evaluate_wrapper(T functor, real_type r) {
-    return functor.evaluate(r);
+    inline ad_real_type functor_evaluate_wrapper(ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C,
+                                                 ad_real_type D
+                                                 ) {
+    //return functor.evaluate(r);
+    ad_real_type br(B * r);
+    ad_real_type dr(D * r);
+    return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
     }
 
     template<typename T>
-    inline real_type functor_dudr_wrapper(T functor, real_type r) {
-    return __enzyme_autodiff<real_type>((void*)functor_evaluate_wrapper<T>, qmcad::enzyme_const, functor, qmcad::enzyme_out, r);
+    inline void functor_dudr_wrapper( ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C,
+                                                 ad_real_type D,
+                                                 ad_real_type& out_du_dr
+                                                 ) {
+      u            = functor_evaluate_wrapper(r,A,B,C,D);
+      auto [du_dr] = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
+      out_du_dr    = du_dr;
+    return out_du_dr;
     }
 
     template<typename T>
-    inline real_type functor_d2udr2_wrapper(T functor, real_type r) {
-    return __enzyme_autodiff<real_type>((void*)functor_dudr_wrapper<T>, qmcad::enzyme_const, functor, qmcad::enzyme_out, r);
+    inline void functor_d2udr2_wrapper( ad_real_type r, 
+                                                 ad_real_type A,
+                                                 ad_real_type B,
+                                                 ad_real_type C,
+                                                 ad_real_type D,
+                                                 ad_real_type& out_du_dr,
+                                                 ad_real_type& out_d2u_dr2
+                                                 ) {
+      u            = functor_evaluate_wrapper(r,A,B,C,D);
+      auto [du_dr]   = derivativesx(u, wrt(r)); // evaluate the first order derivatives of u
+      auto [d2u_dr2] = derivativesx(du_dr, wrt(r));
+      out_du_dr      = du_dr;
+      out_d2u_dr2    = d2u_dr2;
     }
 }
 
@@ -738,24 +769,88 @@ struct PadeTwo2ndOrderFunctor : public OptimizableFunctorBase
   }
 
   inline real_type evaluate(real_type r) {
-    real_type br(B * r);
-    real_type dr(D * r);
-    return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
+    //real_type br(B * r);
+    //real_type dr(D * r);
+    //return (A * r + br * r) / (1.0 + C * C * r + dr * dr);
+
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_D(D);
+    ad_real_type ad_r(r);
+
+    ad_u = qmcad::functor_evaluate_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D);
+    real_type u = val(ad_u);
+    return u;
   }
 
   inline real_type evaluate_dudr(real_type r) { 
-    return qmcad::functor_dudr_wrapper<PadeTwo2ndOrderFunctor>(*this, r);
+    //return qmcad::functor_dudr_wrapper<PadeTwo2ndOrderFunctor>(*this, r);
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_D(D);
+    ad_real_type ad_r(r);
+    ad_real_type ad_du_dr(0.0);
+    ad_real_type ad_u = qmcad::functor_dudr_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr);
+    real_type du_dr = real_type(ad_du_dr);
+    return du_dr;
+
   }
 
   inline real_type evaluate_d2udr2(real_type r) {
-    return qmcad::functor_d2udr2_wrapper<PadeTwo2ndOrderFunctor>(*this, r);
+    //return qmcad::functor_d2udr2_wrapper<PadeTwo2ndOrderFunctor>(*this, r);
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_D(D);
+    ad_real_type ad_r(r);
+    ad_real_type ad_du_dr(0.0);
+    ad_real_type ad_d2u_dr2(0.0);
+    ad_real_type ad_u = qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr, ad_d2u_dr2);
+    real_type du_dr = real_type(ad_du_dr);
+    real_type d2u_dr2 = real_type(ad_d2u_dr2);
+    return d2u_dr2;
+
+
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2)
   {
-    dudr   = evaluate_dudr(r);
-    d2udr2 = evaluate_d2udr2(r);
-    return evaluate(r);
+    //dudr   = evaluate_dudr(r);
+    //d2udr2 = evaluate_d2udr2(r);
+    //return evaluate(r);
+
+    using namespace autodiff;
+    using Eigen::VectorXd;
+    using ad_real_type = var;
+
+    ad_real_type ad_A(A);
+    ad_real_type ad_B(B);
+    ad_real_type ad_C(C);
+    ad_real_type ad_D(D);
+    ad_real_type ad_r(r);
+    ad_real_type ad_du_dr(0.0);
+    ad_real_type ad_d2u_dr2(0.0);
+    ad_real_type ad_u = qmcad::functor_d2udr2_wrapper(ad_r, ad_A, ad_B, ad_C, ad_D,ad_du_dr, ad_d2u_dr2);
+    real_type u = real_type(ad_u)
+    dudr = real_type(ad_du_dr);
+    d2udr2 = real_type(ad_d2u_dr2);
+    return u;
+
+
   }
 
   inline real_type evaluate(real_type r, real_type& dudr, real_type& d2udr2, real_type& d3udr3)
