@@ -21,6 +21,7 @@ set(UTEST_SRCS
     test_gaussian_basis.cpp
     test_cartesian_tensor.cpp
     test_soa_cartesian_tensor.cpp
+    test_sheval.cpp
     test_transform.cpp
     test_min_oned.cpp
     test_OneDimCubicSplineLinearGrid.cpp
